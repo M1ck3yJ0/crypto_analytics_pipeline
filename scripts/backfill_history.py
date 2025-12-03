@@ -11,7 +11,8 @@ after which the daily pipeline (api_pull.py) will append new data.
 
 import os
 import sys
-from datetime import datetime
+import time
+from typing import Optional
 
 import requests
 import pandas as pd
@@ -19,13 +20,13 @@ import pandas as pd
 BASE_URL = "https://api.coingecko.com/api/v3"
 
 VS_CURRENCY = "usd"
-TOP_N_COINS = 30      # number of top coins to backfill
+TOP_N_COINS = 50
 DAYS_HISTORY = 365
 
 OUTPUT_PATH = os.path.join("data", "coingecko_markets.csv")
 
 
-def get_top_coins(vs_currency="usd", top_n=30) -> pd.DataFrame:
+def get_top_coins(vs_currency="usd", top_n=20) -> pd.DataFrame:
     """Get top N coins by market cap."""
     url = f"{BASE_URL}/coins/markets"
     params = {
@@ -42,6 +43,37 @@ def get_top_coins(vs_currency="usd", top_n=30) -> pd.DataFrame:
     return df[["id", "symbol", "name", "market_cap_rank"]]
 
 
+def _request_with_retry(url: str, params: dict, max_retries: int = 5, base_sleep: float = 5.0) -> requests.Response:
+    """
+    Helper to call requests.get with simple retry/backoff logic
+    to handle 429 Too Many Requests.
+    """
+    for attempt in range(1, max_retries + 1):
+        resp = requests.get(url, params=params, timeout=60)
+        if resp.status_code == 429:
+            # Too Many Requests - wait and retry
+            wait_time = base_sleep * attempt
+            print(f"⚠️  Got 429 Too Many Requests (attempt {attempt}/{max_retries}). "
+                  f"Sleeping {wait_time} seconds before retrying...")
+            time.sleep(wait_time)
+            continue
+        try:
+            resp.raise_for_status()
+            return resp
+        except requests.HTTPError as e:
+            # For non-429 errors, either retry or fail fast on last attempt
+            if attempt == max_retries:
+                print(f"❌ HTTP error on {url} after {max_retries} attempts: {e}")
+                raise
+            wait_time = base_sleep * attempt
+            print(f"⚠️  HTTP error (attempt {attempt}/{max_retries}): {e}. "
+                  f"Sleeping {wait_time} seconds before retrying...")
+            time.sleep(wait_time)
+
+    # If we exit the loop without returning, something went wrong
+    raise RuntimeError(f"Failed to fetch {url} after {max_retries} attempts.")
+
+
 def get_history_for_coin(coin_id: str, vs_currency="usd", days=365) -> pd.DataFrame:
     """
     Use /coins/{id}/market_chart to fetch historical
@@ -52,9 +84,9 @@ def get_history_for_coin(coin_id: str, vs_currency="usd", days=365) -> pd.DataFr
         "vs_currency": vs_currency,
         "days": days,
     }
-    r = requests.get(url, params=params, timeout=30)
-    r.raise_for_status()
-    data = r.json()
+
+    resp = _request_with_retry(url, params)
+    data = resp.json()
 
     # lists of [timestamp_ms, value]
     prices = pd.DataFrame(data["prices"], columns=["timestamp_ms", "price"])
@@ -97,13 +129,14 @@ def main() -> int:
 
     all_frames = []
 
-    for _, row in top_coins.iterrows():
+    for idx, row in top_coins.iterrows():
         coin_id = row["id"]
         symbol = row["symbol"]
         name = row["name"]
         rank = row["market_cap_rank"]
 
-        print(f"Fetching history for {name} ({symbol}) [{coin_id}]...")
+        print(f"\n=== ({idx+1}/{len(top_coins)}) Fetching history for {name} ({symbol}) [{coin_id}] ===")
+
         hist_df = get_history_for_coin(coin_id, VS_CURRENCY, DAYS_HISTORY)
 
         # Add metadata columns
@@ -138,11 +171,14 @@ def main() -> int:
 
         all_frames.append(hist_df)
 
+        # sleep between coins
+        time.sleep(3)
+
     full_history = pd.concat(all_frames, ignore_index=True)
-    print(f"Total rows in history: {len(full_history)}")
+    print(f"\n✅ Total rows in history: {len(full_history)}")
 
     full_history.to_csv(OUTPUT_PATH, index=False)
-    print(f"Saved history to {OUTPUT_PATH}")
+    print(f"✅ Saved history to {OUTPUT_PATH}")
 
     return 0
 
