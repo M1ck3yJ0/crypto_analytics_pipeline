@@ -157,7 +157,7 @@ def main() -> int:
         # Add return columns
         hist_df = add_return_columns(hist_df)
 
-        # Align column names with your live pipeline as much as possible
+        # Align column names with live pipeline
         hist_df = hist_df.rename(columns={"price": "current_price"})
 
         # Reorder columns
