@@ -1,0 +1,35 @@
+name: Backfill CoinGecko History
+
+on:
+  workflow_dispatch: {}   # run manually from the Actions tab
+
+permissions:
+  contents: write         # allow this workflow to commit to the repo
+
+jobs:
+  backfill-history:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests
+
+      - name: Run backfill script
+        run: |
+          python scripts/backfill_history.py
+
+      - name: Commit and push backfilled CSV
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "feat: backfill CoinGecko market history"
+          file_pattern: data/coingecko_markets.csv
