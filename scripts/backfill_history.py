@@ -129,7 +129,7 @@ def main() -> int:
 
     all_frames = []
 
-    for idx, row in top_coins.iterrows():
+        for idx, row in top_coins.iterrows():
         coin_id = row["id"]
         symbol = row["symbol"]
         name = row["name"]
@@ -137,7 +137,16 @@ def main() -> int:
 
         print(f"\n=== ({idx+1}/{len(top_coins)}) Fetching history for {name} ({symbol}) [{coin_id}] ===")
 
-        hist_df = get_history_for_coin(coin_id, VS_CURRENCY, DAYS_HISTORY)
+        try:
+            hist_df = get_history_for_coin(coin_id, VS_CURRENCY, DAYS_HISTORY)
+        except Exception as e:
+            # If this coin keeps failing (e.g. rate limits or specific asset issues),
+            # log it and move on to the next one so the whole backfill doesn't die.
+            print(f"❌ Error fetching history for {name} ({symbol}) [{coin_id}]: {e}")
+            print("   -> Skipping this coin and continuing with the others.\n")
+            # brief pause before moving on
+            time.sleep(5)
+            continue
 
         # Add metadata columns
         hist_df["id"] = coin_id
@@ -148,7 +157,7 @@ def main() -> int:
         # Add return columns
         hist_df = add_return_columns(hist_df)
 
-        # Align column names with live pipeline
+        # Align column names with your live pipeline as much as possible
         hist_df = hist_df.rename(columns={"price": "current_price"})
 
         # Reorder columns
