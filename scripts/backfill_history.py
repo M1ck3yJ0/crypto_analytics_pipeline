@@ -129,7 +129,7 @@ def main() -> int:
 
     all_frames = []
 
-        for idx, row in top_coins.iterrows():
+    for idx, row in top_coins.iterrows():
         coin_id = row["id"]
         symbol = row["symbol"]
         name = row["name"]
