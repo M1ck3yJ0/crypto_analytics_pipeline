@@ -2,8 +2,8 @@ name: Update CoinGecko Data
 
 on:
   schedule:
-    # Every day at 06:00 UTC – adjust as needed
-    - cron: "0 6 * * *"
+    # Every day at 18:00 UTC
+    - cron: "1 8 * * *"
   workflow_dispatch: {}
 
 permissions:
