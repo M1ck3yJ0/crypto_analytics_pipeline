@@ -53,7 +53,7 @@ def _request_with_retry(url: str, params: dict, max_retries: int = 5, base_sleep
         if resp.status_code == 429:
             # Too Many Requests - wait and retry
             wait_time = base_sleep * attempt
-            print(f"⚠️  Got 429 Too Many Requests (attempt {attempt}/{max_retries}). "
+            print(f"Got 429 Too Many Requests (attempt {attempt}/{max_retries}). "
                   f"Sleeping {wait_time} seconds before retrying...")
             time.sleep(wait_time)
             continue
@@ -128,6 +128,7 @@ def main() -> int:
     print(f"Fetched top {len(top_coins)} coins by market cap.")
 
     all_frames = []
+    stats = []  # track per-coin status and row counts
 
     for idx, row in top_coins.iterrows():
         coin_id = row["id"]
@@ -140,11 +141,19 @@ def main() -> int:
         try:
             hist_df = get_history_for_coin(coin_id, VS_CURRENCY, DAYS_HISTORY)
         except Exception as e:
-            # If this coin keeps failing (e.g. rate limits or specific asset issues),
-            # log it and move on to the next one so the whole backfill doesn't die.
-            print(f"❌ Error fetching history for {name} ({symbol}) [{coin_id}]: {e}")
+            # log error + skip
+            msg = str(e)
+            print(f"Error fetching history for {name} ({symbol}) [{coin_id}]: {msg}")
             print("   -> Skipping this coin and continuing with the others.\n")
-            # brief pause before moving on
+            stats.append({
+                "id": coin_id,
+                "symbol": symbol,
+                "name": name,
+                "market_cap_rank": rank,
+                "status": "error",
+                "rows": 0,
+                "error": msg,
+            })
             time.sleep(5)
             continue
 
@@ -178,16 +187,44 @@ def main() -> int:
             ]
         ]
 
+        row_count = len(hist_df)
+        print(f"Retrieved {row_count} rows for {name} ({symbol})")
+        stats.append({
+            "id": coin_id,
+            "symbol": symbol,
+            "name": name,
+            "market_cap_rank": rank,
+            "status": "ok",
+            "rows": row_count,
+            "error": "",
+        })
+
         all_frames.append(hist_df)
 
         # sleep between coins
         time.sleep(3)
 
+    if not all_frames:
+        print("No data retrieved for any coin. Aborting without writing CSV.")
+        return 1
+
     full_history = pd.concat(all_frames, ignore_index=True)
-    print(f"\n✅ Total rows in history: {len(full_history)}")
+    print(f"\nTotal rows in history (all successful coins combined): {len(full_history)}")
 
     full_history.to_csv(OUTPUT_PATH, index=False)
-    print(f"✅ Saved history to {OUTPUT_PATH}")
+    print(f"Saved history to {OUTPUT_PATH}")
+
+    # Create and save a summary CSV with per-coin stats
+    stats_df = pd.DataFrame(stats)
+    summary_path = os.path.join("data", "backfill_summary.csv")
+    stats_df.to_csv(summary_path, index=False)
+    print(f"\n📊 Backfill summary written to {summary_path}")
+    print("\nBackfill summary (per coin):")
+    try:
+        # pretty-print a compact table to the Actions log
+        print(stats_df[["name", "symbol", "market_cap_rank", "status", "rows"]].to_string(index=False))
+    except Exception:
+        print(stats_df.to_string(index=False))
 
     return 0
 
