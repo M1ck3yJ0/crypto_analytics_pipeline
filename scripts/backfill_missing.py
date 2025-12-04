@@ -21,7 +21,7 @@ DAYS_HISTORY = 365
 OUTPUT_PATH = os.path.join("data", "coingecko_markets.csv")
 
 # Symbols of coins that previously errored in the backfill summary
-MISSING_SYMBOLS = {"bnb", "ada", "link", "xlm", "avax", "susds", "dot", "cc"}
+MISSING_SYMBOLS = {"avax"}
 
 
 def get_top_coins(vs_currency="usd", per_page=100) -> pd.DataFrame:
