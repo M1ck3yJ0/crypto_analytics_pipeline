@@ -131,4 +131,129 @@ def main() -> int:
         print(f"❌ {OUTPUT_PATH} does not exist. Run initial backfill first.")
         return 1
 
-    print(f"Loading existing data
+    print(f"Loading existing data from {OUTPUT_PATH} ...")
+    df = pd.read_csv(OUTPUT_PATH, parse_dates=["timestamp_utc"])
+
+    # 1) Remove rows for the target dates
+    print(f"Initial rows: {len(df)}")
+    df["date_only"] = df["timestamp_utc"].dt.date
+    before = len(df)
+    df = df[~df["date_only"].isin(TARGET_DATES)].copy()
+    after = len(df)
+    print(f"Removed {before - after} rows for dates {TARGET_DATES}")
+
+    # We'll need unique coin metadata from existing data
+    meta_cols = ["id", "symbol", "name", "market_cap_rank"]
+    coin_meta = df[meta_cols].drop_duplicates()
+
+    # 2) For each coin, fetch recent history and pick midnight points for target dates
+    all_new_rows = []
+    stats = []
+
+    for _, row in coin_meta.iterrows():
+        coin_id = row["id"]
+        symbol = row["symbol"]
+        name = row["name"]
+        rank = row["market_cap_rank"]
+
+        print(f"\n=== Backfilling specific dates for {name} ({symbol}) [{coin_id}] ===")
+
+        try:
+            hist_df = get_history_for_coin(coin_id, VS_CURRENCY, HISTORY_DAYS)
+        except Exception as e:
+            msg = str(e)
+            print(f"❌ Error fetching history for {name} ({symbol}) [{coin_id}]: {msg}")
+            stats.append({
+                "id": coin_id,
+                "symbol": symbol,
+                "name": name,
+                "market_cap_rank": rank,
+                "status": "error",
+                "rows": 0,
+                "error": msg,
+            })
+            time.sleep(5)
+            continue
+
+        # Add return columns on the full history window
+        hist_df = add_return_columns(hist_df)
+
+        # Pick rows closest to midnight for each target date
+        # (Note: we assume the 10-day window includes those target dates)
+        picked = pick_midnight_rows(hist_df, TARGET_DATES)
+
+        # Add metadata columns and align schema
+        picked["id"] = coin_id
+        picked["symbol"] = symbol
+        picked["name"] = name
+        picked["market_cap_rank"] = rank
+        picked = picked.rename(columns={"price": "current_price"})
+
+        picked = picked[
+            [
+                "id",
+                "symbol",
+                "name",
+                "market_cap_rank",
+                "timestamp_utc",
+                "current_price",
+                "market_cap",
+                "total_volume",
+                "price_change_percentage_24h_in_currency",
+                "price_change_percentage_7d_in_currency",
+                "price_change_percentage_30d_in_currency",
+                "timestamp_ms",
+            ]
+        ]
+
+        row_count = len(picked)
+        print(f"✅ Retrieved {row_count} replacement rows for {name} ({symbol})")
+        stats.append({
+            "id": coin_id,
+            "symbol": symbol,
+            "name": name,
+            "market_cap_rank": rank,
+            "status": "ok",
+            "rows": row_count,
+            "error": "",
+        })
+
+        all_new_rows.append(picked)
+        time.sleep(2)
+
+    if not all_new_rows:
+        print("No new rows created for any coin. Aborting without writing.")
+        return 1
+
+    new_rows_df = pd.concat(all_new_rows, ignore_index=True)
+
+    # Drop helper column
+    df = df.drop(columns=["date_only"])
+
+    # 3) Append and deduplicate by (id, timestamp_utc)
+    # Ensure union of columns
+    for col in new_rows_df.columns:
+        if col not in df.columns:
+            df[col] = pd.NA
+    for col in df.columns:
+        if col not in new_rows_df.columns:
+            new_rows_df[col] = pd.NA
+
+    combined = pd.concat([df, new_rows_df], ignore_index=True)
+
+    if {"id", "timestamp_utc"}.issubset(combined.columns):
+        combined = combined.drop_duplicates(subset=["id", "timestamp_utc"])
+
+    combined.to_csv(OUTPUT_PATH, index=False)
+    print(f"\n✅ Saved updated file with backfilled dates to {OUTPUT_PATH}")
+
+    # Print quick summary
+    stats_df = pd.DataFrame(stats)
+    print("\nBackfill-specific-dates summary:")
+    print(stats_df[["name", "symbol", "market_cap_rank", "status", "rows"]].to_string(index=False))
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
