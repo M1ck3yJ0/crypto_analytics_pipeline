@@ -132,8 +132,21 @@ def main() -> int:
         return 1
 
     print(f"Loading existing data from {OUTPUT_PATH} ...")
-    df = pd.read_csv(OUTPUT_PATH, parse_dates=["timestamp_utc"])
-
+    df = pd.read_csv(OUTPUT_PATH)
+    
+    # Ensure timestamp_utc is proper datetime with timezone
+    if "timestamp_utc" not in df.columns:
+        print("❌ Column 'timestamp_utc' not found in CSV.")
+        return 1
+    
+    df["timestamp_utc"] = pd.to_datetime(df["timestamp_utc"], utc=True, errors="coerce")
+    
+    # Optionally drop any rows where timestamp_utc couldn't be parsed
+    invalid_ts = df["timestamp_utc"].isna().sum()
+    if invalid_ts > 0:
+        print(f"⚠️ Found {invalid_ts} rows with invalid 'timestamp_utc' - dropping them.")
+        df = df.dropna(subset=["timestamp_utc"])
+    
     # 1) Remove rows for the target dates
     print(f"Initial rows: {len(df)}")
     df["date_only"] = df["timestamp_utc"].dt.date
