@@ -1,0 +1,51 @@
+id,symbol,name,rank_on_2025_12_01
+bitcoin,btc,Bitcoin,1
+ethereum,eth,Ethereum,2
+tether,usdt,Tether,3
+ripple,xrp,XRP,4
+binancecoin,bnb,BNB,5
+solana,sol,Solana,6
+usd-coin,usdc,USDC,7
+staked-ether,steth,Lido Staked Ether,8
+tron,trx,TRON,9
+dogecoin,doge,Dogecoin,10
+cardano,ada,Cardano,11
+figure-heloc,figr_heloc,Figure Heloc,12
+whitebit,wbt,WhiteBIT Coin,13
+wrapped-steth,wsteth,Wrapped stETH,14
+wrapped-bitcoin,wbtc,Wrapped Bitcoin,15
+bitcoin-cash,bch,Bitcoin Cash,16
+wrapped-beacon-eth,wbeth,Wrapped Beacon ETH,17
+chainlink,link,Chainlink,18
+usds,usds,USDS,19
+hyperliquid,hype,Hyperliquid,20
+binance-bridged-usdt-bnb-smart-chain,bsc-usd,Binance Bridged USDT (BNB Smart Chain),21
+leo-token,leo,LEO Token,22
+weth,weth,WETH,23
+stellar,xlm,Stellar,24
+wrapped-eeth,weeth,Wrapped eETH,25
+monero,xmr,Monero,26
+ethena-usde,usde,Ethena USDe,27
+coinbase-wrapped-btc,cbbtc,Coinbase Wrapped BTC,28
+litecoin,ltc,Litecoin,29
+avalanche-2,avax,Avalanche,30
+sui,sui,Sui,31
+hedera-hashgraph,hbar,Hedera,32
+zcash,zec,Zcash,33
+shiba-inu,shib,Shiba Inu,34
+dai,dai,Dai,35
+susds,susds,sUSDS,36
+world-liberty-financial,wlfi,World Liberty Financial,37
+crypto-com-chain,cro,Cronos,38
+usdt0,usdt0,USDT0,39
+the-open-network,ton,Toncoin,40
+paypal-usd,pyusd,PayPal USD,41
+polkadot,dot,Polkadot,42
+uniswap,uni,Uniswap,43
+ethena-staked-usde,susde,Ethena Staked USDe,44
+mantle,mnt,Mantle,45
+aave,aave,Aave,46
+bittensor,tao,Bittensor,47
+usd1-wlfi,usd1,USD1,48
+canton-network,cc,Canton,49
+bitget-token,bgb,Bitget Token,50
