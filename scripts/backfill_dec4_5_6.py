@@ -40,6 +40,7 @@ TARGET_DATES = [
     date(2025, 12, 4),
     date(2025, 12, 5),
     date(2025, 12, 6),
+    date(2025, 12, 7),
 ]
 
 # Days of history to fetch (must be <= 90 for sub-daily points)
@@ -212,7 +213,7 @@ def main() -> int:
             })
             continue
 
-        print(f"\n=== Backfilling Dec 4/5/6 for {name} ({symbol}) [{coin_id}] ===")
+        print(f"\n=== Backfilling Dec 4/5/6/7 for {name} ({symbol}) [{coin_id}] ===")
         print(f"Missing dates for this coin: {missing_dates}")
 
         try:
@@ -304,7 +305,7 @@ def main() -> int:
     print(f"\n✅ Saved updated file with backfilled missing dates to {OUTPUT_PATH}")
 
     stats_df = pd.DataFrame(stats)
-    print("\nBackfill Dec 4/5/6 summary:")
+    print("\nBackfill Dec 4/5/6/7 summary:")
     print(stats_df[["name", "symbol", "market_cap_rank", "status", "rows"]].to_string(index=False))
 
     return 0
