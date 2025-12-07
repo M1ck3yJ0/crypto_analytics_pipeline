@@ -1,0 +1,35 @@
+name: Backfill Dec 4/5/6
+
+on:
+  workflow_dispatch: {}   # run manually
+
+permissions:
+  contents: write
+
+jobs:
+  backfill-dec4-5-6:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests
+
+      - name: Run backfill_dec4_5_6 script
+        run: |
+          python scripts/backfill_dec4_5_6.py
+
+      - name: Commit and push updated CSV
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: backfill Dec 4/5/6 with midnight data"
+          file_pattern: data/coingecko_markets.csv
