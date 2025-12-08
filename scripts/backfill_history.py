@@ -2,7 +2,8 @@
 """
 scripts/backfill_history.py
 
-This is a one-off script to backfill 365 days of historical data for the top N crypto coins
+This is a one-off script to backfill 365 days of historical data for 
+a "frozen universe" of the top 50 crypto coins as of 2025-12-01
 using the CoinGecko API, and save it to data/coingecko_markets.csv.
 
 This is intended to be run just once to create the initial CSV,
