@@ -2,23 +2,18 @@
 """
 scripts/api_pull.py
 
-Daily update script for the fixed-universe, date-only crypto dataset.
+This is a daily update script for the fixed-universe crypto dataset.
+A "frozen universe" of the top 50 crypto coins as of 2025-12-01 was selected
+for a Power BI crypto analytics project. 
+This script uses the CoinGecko API to read the fixed universe of coins from 
+config/universe_top50_dec01_2025.csv (id, symbol, name, rank_on_2025_12_01).
+For each coin, it fetches the recent history via /coins/{id}/market_chart.
+For today's UTC calendar date, it selects the data point closest to 00:00:00 UTC.
+It then ppends one row per coin with a pure 'date' column (YYYY-MM-DD, no time) 
+to data/coingecko_markets.csv and computes daily (1d), 7d, and 30d returns.
+If some coins fail due to rate limiting or other errors, 
+it waits for a longer period and retries those coins only.
 
-Behavior:
-- Reads a fixed universe of coins from config/universe_top50_dec01_2025.csv
-  (id, symbol, name, rank_on_2025_12_01).
-- For each coin, fetches recent history via /coins/{id}/market_chart.
-- For today's UTC calendar date, selects the data point closest to 00:00:00 UTC.
-- Appends one row per coin with a pure 'date' column (YYYY-MM-DD, no time)
-  to data/coingecko_markets.csv.
-- Recomputes daily (1d), 7d, and 30d returns across the full dataset per coin.
-- If some coins fail due to rate limiting or other errors, it waits once
-  for a longer period and retries those coins only.
-
-Assumptions:
-- data/coingecko_markets.csv has been normalised to:
-  - one row per (id, date)
-  - a 'date' column (no timestamp_utc / timestamp_ms)
 """
 
 import os
@@ -35,7 +30,7 @@ VS_CURRENCY = "usd"
 OUTPUT_PATH = os.path.join("data", "coingecko_markets.csv")
 UNIVERSE_PATH = os.path.join("config", "universe_top50_dec01_2025.csv")
 
-# Days of history to fetch around today (must be <= 90 to get sub-daily granularity)
+# Days of history to fetch around today
 HISTORY_DAYS = 5
 
 # Seconds to wait before a second attempt for failed coins
