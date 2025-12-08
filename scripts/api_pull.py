@@ -1,28 +1,24 @@
-"""
-scripts/api_pull.py
-
-This script is to pull market data from the CoinGecko API and append it to data/coingecko_markets.csv.
-It's intended to run on a schedule by GitHub Actions.
-"""
-
 #!/usr/bin/env python3
 """
 scripts/api_pull.py
 
-Daily update script for your fixed-universe, date-only crypto dataset.
+Daily update script for the fixed-universe, date-only crypto dataset.
 
 Behavior:
 - Reads a fixed universe of coins from config/universe_top50_dec01_2025.csv
   (id, symbol, name, rank_on_2025_12_01).
 - For each coin, fetches recent history via /coins/{id}/market_chart.
-- For TODAY (UTC calendar date), picks the data point closest to 00:00:00 UTC.
-- Creates a pure 'date' column (YYYY-MM-DD, no time) and appends those daily rows
+- For today's UTC calendar date, selects the data point closest to 00:00:00 UTC.
+- Appends one row per coin with a pure 'date' column (YYYY-MM-DD, no time)
   to data/coingecko_markets.csv.
 - Recomputes daily (1d), 7d, and 30d returns across the full dataset per coin.
+- If some coins fail due to rate limiting or other errors, it waits once
+  for a longer period and retries those coins only.
 
 Assumptions:
-- data/coingecko_markets.csv is already normalised to one row per (id, date)
-  with a 'date' column and no timestamp_utc / timestamp_ms.
+- data/coingecko_markets.csv has been normalised to:
+  - one row per (id, date)
+  - a 'date' column (no timestamp_utc / timestamp_ms)
 """
 
 import os
@@ -39,8 +35,11 @@ VS_CURRENCY = "usd"
 OUTPUT_PATH = os.path.join("data", "coingecko_markets.csv")
 UNIVERSE_PATH = os.path.join("config", "universe_top50_dec01_2025.csv")
 
-# Days of history to fetch around today (<= 90 to get sub-daily granularity)
+# Days of history to fetch around today (must be <= 90 to get sub-daily granularity)
 HISTORY_DAYS = 5
+
+# Seconds to wait before a second attempt for failed coins
+SECOND_PASS_SLEEP_SECONDS = 300
 
 
 def _request_with_retry(
@@ -50,15 +49,15 @@ def _request_with_retry(
     base_sleep: float = 5.0,
 ) -> requests.Response:
     """
-    Helper to call requests.get with simple retry/backoff logic
-    to handle 429 Too Many Requests, transient HTTP errors, etc.
+    Call requests.get with simple retry/backoff logic to handle
+    429 (Too Many Requests) and transient HTTP errors.
     """
     for attempt in range(1, max_retries + 1):
         resp = requests.get(url, params=params, timeout=60)
         if resp.status_code == 429:
             wait_time = base_sleep * attempt
             print(
-                f"⚠️  429 Too Many Requests (attempt {attempt}/{max_retries}). "
+                f"429 Too Many Requests (attempt {attempt}/{max_retries}). "
                 f"Sleeping {wait_time} seconds..."
             )
             time.sleep(wait_time)
@@ -68,11 +67,11 @@ def _request_with_retry(
             return resp
         except requests.HTTPError as e:
             if attempt == max_retries:
-                print(f"❌ HTTP error on {url} after {max_retries} attempts: {e}")
+                print(f"HTTP error on {url} after {max_retries} attempts: {e}")
                 raise
             wait_time = base_sleep * attempt
             print(
-                f"⚠️  HTTP error (attempt {attempt}/{max_retries}): {e}. "
+                f"HTTP error (attempt {attempt}/{max_retries}): {e}. "
                 f"Sleeping {wait_time} seconds..."
             )
             time.sleep(wait_time)
@@ -85,7 +84,8 @@ def load_universe(path: str = UNIVERSE_PATH) -> pd.DataFrame:
     Load fixed-universe coin list from CSV.
 
     Expected columns: id, symbol, name, rank_on_2025_12_01
-    (we ignore the rank in the fact table, but keep it here in case it's useful later).
+    The rank is not written into the fact table but is kept in the
+    universe file for documentation.
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Universe file not found at {path}")
@@ -96,7 +96,6 @@ def load_universe(path: str = UNIVERSE_PATH) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Universe CSV missing columns: {missing}")
 
-    # We don't need rank in the fact table, so we just return id/symbol/name here.
     return uni[["id", "symbol", "name"]]
 
 
@@ -106,8 +105,9 @@ def get_recent_history_for_coin(
     days: int = HISTORY_DAYS,
 ) -> pd.DataFrame:
     """
-    Use /coins/{id}/market_chart to fetch recent historical price, market cap, and volume.
-    For days <= 90, CoinGecko returns sub-daily intervals (hourly-ish).
+    Use /coins/{id}/market_chart to fetch recent price, market cap, and volume.
+
+    For days <= 90, CoinGecko returns sub-daily intervals (for example, hourly).
     """
     url = f"{BASE_URL}/coins/{coin_id}/market_chart"
     params = {
@@ -133,8 +133,7 @@ def pick_midnight_for_date(hist_df: pd.DataFrame, target_date: date) -> pd.Serie
     From a history dataframe, pick the row whose timestamp_utc is closest to
     the target date's midnight (00:00:00 UTC).
 
-    We only use the price / market_cap / total_volume from that row;
-    we store 'date' in the fact table, not the timestamp.
+    The caller uses only price, market_cap, and total_volume from the selected row.
     """
     midnight = datetime(
         target_date.year,
@@ -153,8 +152,8 @@ def pick_midnight_for_date(hist_df: pd.DataFrame, target_date: date) -> pd.Serie
 
 def recompute_returns(combined: pd.DataFrame) -> pd.DataFrame:
     """
-    Recompute 1d, 7d, 30d percentage changes per coin based on current_price
-    across the ENTIRE dataset, grouped by id and ordered by date.
+    Recompute 1d, 7d, and 30d percentage changes per coin based on current_price
+    across the entire dataset, grouped by id and ordered by date.
 
     Overwrites/creates:
         - price_change_percentage_24h_in_currency
@@ -167,10 +166,8 @@ def recompute_returns(combined: pd.DataFrame) -> pd.DataFrame:
 
     df = combined.copy()
     df["date"] = pd.to_datetime(df["date"]).dt.date
-
     df = df.sort_values(["id", "date"], ascending=[True, True])
 
-    # Ensure return columns exist
     for col in [
         "price_change_percentage_24h_in_currency",
         "price_change_percentage_7d_in_currency",
@@ -196,8 +193,62 @@ def recompute_returns(combined: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def process_coin_for_date(
+    coin_id: str,
+    symbol: str,
+    name: str,
+    target_date: date,
+) -> dict:
+    """
+    Fetch recent history for a single coin and construct a row for target_date.
+
+    Returns a dictionary with:
+        {
+            "status": "ok" | "error",
+            "rows": 1 or 0,
+            "error": error_message or "",
+            "new_row": dict or None
+        }
+    """
+    try:
+        hist_df = get_recent_history_for_coin(coin_id, VS_CURRENCY, HISTORY_DAYS)
+    except Exception as e:
+        msg = str(e)
+        print(
+            f"Error fetching history for {name} ({symbol}) [{coin_id}]: {msg}"
+        )
+        return {
+            "status": "error",
+            "rows": 0,
+            "error": msg,
+            "new_row": None,
+        }
+
+    picked = pick_midnight_for_date(hist_df, target_date)
+    print(
+        f"Using source timestamp {picked['timestamp_utc']} for {name} ({symbol}) on {target_date}."
+    )
+
+    new_row = {
+        "id": coin_id,
+        "symbol": symbol,
+        "name": name,
+        "date": target_date,  # pure date, no time component
+        "current_price": picked["price"],
+        "market_cap": picked["market_cap"],
+        "total_volume": picked["total_volume"],
+    }
+
+    return {
+        "status": "ok",
+        "rows": 1,
+        "error": "",
+        "new_row": new_row,
+    }
+
+
 def main() -> int:
-    # TODAY (UTC) is the date we will store. Run this after midnight UTC.
+    # Today (UTC) is the date we will store. The workflow should run after midnight UTC.
     target_date = datetime.now(timezone.utc).date()
     print(f"Target date for daily update (midnight UTC): {target_date}")
 
@@ -211,9 +262,9 @@ def main() -> int:
         print(f"Loaded existing data: {len(existing)} rows.")
     else:
         existing = pd.DataFrame()
-        print("No existing data file found; will create a new one.")
+        print("No existing data file found; a new one will be created.")
 
-    # Make sure we have a 'date' column in the existing data
+    # Ensure we have a 'date' column in the existing data
     if not existing.empty:
         if "date" not in existing.columns:
             raise ValueError(
@@ -228,6 +279,9 @@ def main() -> int:
     all_new_rows = []
     stats = []
 
+    # First pass
+    first_pass_errors = []
+
     for _, row in universe.iterrows():
         coin_id = row["id"]
         symbol = row["symbol"]
@@ -238,7 +292,7 @@ def main() -> int:
             mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
             if mask.any():
                 print(
-                    f"Skipping {name} ({symbol}) [{coin_id}] - already have data for {target_date}."
+                    f"Skipping {name} ({symbol}) [{coin_id}] - data for {target_date} already exists."
                 )
                 stats.append(
                     {
@@ -253,58 +307,88 @@ def main() -> int:
                 continue
 
         print(
-            f"\n=== Fetching midnight-ish data for {name} ({symbol}) [{coin_id}] on {target_date} ==="
+            f"\n[First pass] Fetching data for {name} ({symbol}) [{coin_id}] on {target_date}"
         )
-        try:
-            hist_df = get_recent_history_for_coin(
-                coin_id, VS_CURRENCY, HISTORY_DAYS
-            )
-        except Exception as e:
-            msg = str(e)
-            print(
-                f"❌ Error fetching history for {name} ({symbol}) [{coin_id}]: {msg}"
-            )
+        result = process_coin_for_date(coin_id, symbol, name, target_date)
+
+        if result["status"] == "ok":
+            all_new_rows.append(result["new_row"])
             stats.append(
                 {
                     "id": coin_id,
                     "symbol": symbol,
                     "name": name,
-                    "status": "error",
-                    "rows": 0,
-                    "error": msg,
+                    "status": "ok",
+                    "rows": result["rows"],
+                    "error": "",
                 }
             )
-            time.sleep(5)
-            continue
+        else:
+            first_pass_errors.append((coin_id, symbol, name))
+            stats.append(
+                {
+                    "id": coin_id,
+                    "symbol": symbol,
+                    "name": name,
+                    "status": "error_first_pass",
+                    "rows": 0,
+                    "error": result["error"],
+                }
+            )
 
-        picked = pick_midnight_for_date(hist_df, target_date)
+        time.sleep(1.5)  # space out requests
+
+    # Second pass for errors, if any
+    if first_pass_errors:
         print(
-            f"Using source timestamp {picked['timestamp_utc']} for {name} ({symbol}) on {target_date}."
+            f"\n{len(first_pass_errors)} coin(s) failed in the first pass. "
+            f"Sleeping {SECOND_PASS_SLEEP_SECONDS} seconds before retrying..."
         )
+        time.sleep(SECOND_PASS_SLEEP_SECONDS)
 
-        new_row = {
-            "id": coin_id,
-            "symbol": symbol,
-            "name": name,
-            "date": target_date,  # pure date, no time
-            "current_price": picked["price"],
-            "market_cap": picked["market_cap"],
-            "total_volume": picked["total_volume"],
-        }
+        for coin_id, symbol, name in first_pass_errors:
+            # Re-check in case the row exists (in case of manual fixes or reruns)
+            if not existing.empty:
+                mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
+                if mask.any():
+                    print(
+                        f"Skipping retry for {name} ({symbol}) [{coin_id}] - data for "
+                        f"{target_date} already exists."
+                    )
+                    continue
 
-        all_new_rows.append(new_row)
-        stats.append(
-            {
-                "id": coin_id,
-                "symbol": symbol,
-                "name": name,
-                "status": "ok",
-                "rows": 1,
-                "error": "",
-            }
-        )
+            print(
+                f"\n[Second pass] Retrying data fetch for {name} ({symbol}) [{coin_id}] "
+                f"on {target_date}"
+            )
+            result = process_coin_for_date(coin_id, symbol, name, target_date)
 
-        time.sleep(1.5)  # be nice to the API
+            if result["status"] == "ok":
+                all_new_rows.append(result["new_row"])
+                stats.append(
+                    {
+                        "id": coin_id,
+                        "symbol": symbol,
+                        "name": name,
+                        "status": "ok_second_pass",
+                        "rows": result["rows"],
+                        "error": "",
+                    }
+                )
+            else:
+                # Record final failure
+                stats.append(
+                    {
+                        "id": coin_id,
+                        "symbol": symbol,
+                        "name": name,
+                        "status": "error_second_pass",
+                        "rows": 0,
+                        "error": result["error"],
+                    }
+                )
+
+            time.sleep(1.5)
 
     if not all_new_rows:
         print("No new rows created for any coin. Nothing to append.")
@@ -332,7 +416,7 @@ def main() -> int:
         combined["date"] = pd.to_datetime(combined["date"]).dt.date
         combined = combined.drop_duplicates(subset=["id", "date"])
 
-    # Recompute returns across full dataset
+    # Recompute returns across the full dataset
     combined = recompute_returns(combined)
 
     # Optional: add a pipeline run timestamp column (same for all rows)
@@ -342,13 +426,16 @@ def main() -> int:
     # Save
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     combined.to_csv(OUTPUT_PATH, index=False)
-    print(f"\n✅ Saved updated daily data to {OUTPUT_PATH}")
+    print(f"\nSaved updated daily data to {OUTPUT_PATH}")
 
     # Print summary
     stats_df = pd.DataFrame(stats)
     if not stats_df.empty:
         print("\nDaily update summary:")
-        print(stats_df[["name", "symbol", "status", "rows"]].to_string(index=False))
+        print(
+            stats_df[["name", "symbol", "status", "rows", "error"]]
+            .to_string(index=False)
+        )
 
     return 0
 
