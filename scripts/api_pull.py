@@ -34,7 +34,7 @@ UNIVERSE_PATH = os.path.join("config", "universe_top50_dec01_2025.csv")
 HISTORY_DAYS = 5
 
 # Seconds to wait before a second attempt for failed coins
-SECOND_PASS_SLEEP_SECONDS = 300
+SECOND_PASS_SLEEP_SECONDS = 1200
 
 
 def _request_with_retry(
@@ -432,8 +432,18 @@ def main() -> int:
             .to_string(index=False)
         )
 
-    return 0
+    # If any coins still failed after the second pass, return a non-zero exit code
+    if not stats_df.empty:
+        error_statuses = {"error_first_pass", "error_second_pass"}
+        had_errors = stats_df["status"].isin(error_statuses).any()
+        if had_errors:
+            print(
+                "\nOne or more coins failed after retries. "
+                "The workflow will exit with a non-zero status to highlight the issue."
+            )
+            return 1
 
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
