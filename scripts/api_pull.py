@@ -11,8 +11,8 @@ For each coin, it fetches the recent history via /coins/{id}/market_chart.
 For today's UTC calendar date, it selects the data point closest to 00:00:00 UTC.
 It then ppends one row per coin with a pure 'date' column (YYYY-MM-DD, no time) 
 to data/coingecko_markets.csv and computes daily (1d), 7d, and 30d returns.
-If some coins fail due to rate limiting or other errors, 
-it waits for a longer period and retries those coins only.
+If some coins fail due to rate limiting or other errors, it waits for a longer period 
+and retries those coins only. Further failure results in exit code 1 and thus an alert.
 
 """
 
