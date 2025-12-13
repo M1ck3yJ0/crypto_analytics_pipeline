@@ -1,7 +1,7 @@
 # Crypto Analytics Data Pipeline
 
-![Daily Pipeline](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/daily_pull.yml/badge.svg)
-![Retry Worker](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/retry_missing.yml/badge.svg)
+[![Update CoinGecko Data](https://github.com/M1ck3yJ0/crypto_analytics_pipeline/actions/workflows/update_coingecko.yml/badge.svg)]
+[![Retry Missing Rows](https://github.com/M1ck3yJ0/crypto_analytics_pipeline/actions/workflows/retry_missing.yml/badge.svg)]
 
 An automated, fault-tolerant cryptocurrency data pipeline that ingests daily market data from the CoinGecko API and feeds a Power BI analytics dashboard.
 
