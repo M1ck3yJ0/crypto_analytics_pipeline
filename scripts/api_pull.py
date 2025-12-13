@@ -346,29 +346,29 @@ def main() -> int:
     first_pass_errors = []
 
     for target_date in TARGET_DATES:
-    print(f"\n=== Processing date {target_date} ===")
-
-    for _, row in universe.iterrows():
-        coin_id = row["id"]
-        symbol = row["symbol"]
-        name = row["name"]
-
-        # Skip if already exists
-        if not existing.empty:
-            mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
-            if mask.any():
-                continue
-
-        result = process_coin_for_date(
-            coin_id=coin_id,
-            symbol=symbol,
-            name=name,
-            target_date=target_date,
-        )
-
-        if result["status"] == "ok":
-            all_new_rows.append(result["new_row"])
-
+        print(f"\n=== Processing date {target_date} ===")
+    
+        for _, row in universe.iterrows():
+            coin_id = row["id"]
+            symbol = row["symbol"]
+            name = row["name"]
+    
+            # Skip if already exists
+            if not existing.empty:
+                mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
+                if mask.any():
+                    continue
+    
+            result = process_coin_for_date(
+                coin_id=coin_id,
+                symbol=symbol,
+                name=name,
+                target_date=target_date,
+            )
+    
+            if result["status"] == "ok":
+                all_new_rows.append(result["new_row"])
+    
     
     # for _, row in universe.iterrows():
     #     coin_id = row["id"]
