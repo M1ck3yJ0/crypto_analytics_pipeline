@@ -1,11 +1,47 @@
-# crypto_analytics_pipeline
-An automated cryptocurrency data pipeline feeding a tracking and analytics dashboard.
+# Crypto Analytics Data Pipeline
 
-API: CoinGecko API
+![Daily Pipeline](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/daily_pull.yml/badge.svg)
+![Retry Worker](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/retry_missing.yml/badge.svg)
 
-Data storage: GitHub repository (version-controlled)
+An automated, fault-tolerant cryptocurrency data pipeline that ingests daily market data from the CoinGecko API and feeds a Power BI analytics dashboard.
 
-Automation: GitHub Actions
+This project focuses on **robust pipeline design** rather than simple data extraction.
 
-Analytics: Power BI
+---
 
+## Overview
+
+- **Source:** CoinGecko API
+- **Universe:** Fixed top 50 cryptocurrencies (as of 2025-12-01)
+- **Storage:** Version-controlled CSV dataset (GitHub)
+- **Orchestration:** GitHub Actions
+- **Analytics:** Power BI
+
+---
+
+## Pipeline Design
+
+- Runs daily after UTC midnight
+- Stores one row per coin per day (date-level grain)
+- Normalises timestamps for clean analytics
+- Idempotent: safe to re-run without duplicating data
+- Automatically recomputes rolling returns (1d / 7d / 30d)
+
+---
+
+## Failure Handling
+
+- API failures are written to a durable retry queue
+- A separate retry workflow runs independently
+- Missing data is backfilled automatically once available
+- The pipeline favours **eventual consistency** over hard failure
+
+---
+
+## Repository Structure
+
+```text
+config/   # Fixed universe definition
+data/     # Fact table and retry queue
+scripts/  # Ingestion and retry logic
+.github/  # GitHub Actions workflows
