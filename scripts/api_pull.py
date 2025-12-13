@@ -303,9 +303,17 @@ def upsert_missing_queue(
 
 
 def main() -> int:
-    # Today (UTC) is the date we will store. The workflow should run after midnight UTC.
-    target_date = datetime.now(timezone.utc).date()
-    print(f"Target date for daily update (midnight UTC): {target_date}")
+    # ONE-TIME BACKFILL: hardcoded dates (REMOVE AFTER RUN)
+    TARGET_DATES = [
+        date(2025, 12, 9),
+        date(2025, 12, 10),
+        date(2025, 12, 11),
+        date(2025, 12, 12),
+    ]
+
+    # # Today (UTC) is the date we will store. The workflow should run after midnight UTC.
+    # target_date = datetime.now(timezone.utc).date()
+    # print(f"Target date for daily update (midnight UTC): {target_date}")
 
     # Load universe of coins
     universe = load_universe(UNIVERSE_PATH)
@@ -337,34 +345,59 @@ def main() -> int:
     # First pass
     first_pass_errors = []
 
+    for target_date in TARGET_DATES:
+    print(f"\n=== Processing date {target_date} ===")
+
     for _, row in universe.iterrows():
         coin_id = row["id"]
         symbol = row["symbol"]
         name = row["name"]
 
-        # If we already have a row for this coin+date, skip
+        # Skip if already exists
         if not existing.empty:
             mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
             if mask.any():
-                print(
-                    f"Skipping {name} ({symbol}) [{coin_id}] - data for {target_date} already exists."
-                )
-                stats.append(
-                    {
-                        "id": coin_id,
-                        "symbol": symbol,
-                        "name": name,
-                        "status": "already_have",
-                        "rows": 0,
-                        "error": "",
-                    }
-                )
                 continue
 
-        print(
-            f"\n[First pass] Fetching data for {name} ({symbol}) [{coin_id}] on {target_date}"
+        result = process_coin_for_date(
+            coin_id=coin_id,
+            symbol=symbol,
+            name=name,
+            target_date=target_date,
         )
-        result = process_coin_for_date(coin_id, symbol, name, target_date)
+
+        if result["status"] == "ok":
+            all_new_rows.append(result["new_row"])
+
+    
+    # for _, row in universe.iterrows():
+    #     coin_id = row["id"]
+    #     symbol = row["symbol"]
+    #     name = row["name"]
+
+    #     # If we already have a row for this coin+date, skip
+    #     if not existing.empty:
+    #         mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
+    #         if mask.any():
+    #             print(
+    #                 f"Skipping {name} ({symbol}) [{coin_id}] - data for {target_date} already exists."
+    #             )
+    #             stats.append(
+    #                 {
+    #                     "id": coin_id,
+    #                     "symbol": symbol,
+    #                     "name": name,
+    #                     "status": "already_have",
+    #                     "rows": 0,
+    #                     "error": "",
+    #                 }
+    #             )
+    #             continue
+
+    #     print(
+    #         f"\n[First pass] Fetching data for {name} ({symbol}) [{coin_id}] on {target_date}"
+    #     )
+    #     result = process_coin_for_date(coin_id, symbol, name, target_date)
 
         if result["status"] == "ok":
             all_new_rows.append(result["new_row"])
