@@ -35,5 +35,5 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update CoinGecko market data"
-          file_pattern: data/coingecko_markets.csv
+          file_pattern: data/coingecko_markets.csv data/missing_queue.csv
 
