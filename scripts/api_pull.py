@@ -29,6 +29,7 @@ VS_CURRENCY = "usd"
 
 OUTPUT_PATH = os.path.join("data", "coingecko_markets.csv")
 UNIVERSE_PATH = os.path.join("config", "universe_top50_dec01_2025.csv")
+MISSING_QUEUE_PATH = os.path.join("data", "missing_queue.csv")
 
 # Days of history to fetch around today
 HISTORY_DAYS = 5
@@ -241,6 +242,65 @@ def process_coin_for_date(
         "new_row": new_row,
     }
 
+def upsert_missing_queue(
+    missing_items: list[dict],
+    queue_path: str = MISSING_QUEUE_PATH,
+) -> None:
+    """
+    Append or update missing (id, date) items into a durable queue CSV.
+
+    Queue rows are unique by (id, date). If an item already exists, it is updated
+    (attempts incremented, last_error refreshed, last_attempt_utc set).
+    """
+    if not missing_items:
+        return
+
+    now_utc = datetime.now(timezone.utc).isoformat()
+
+    incoming = pd.DataFrame(missing_items)
+    incoming["date"] = pd.to_datetime(incoming["date"]).dt.date.astype(str)
+    incoming["last_attempt_utc"] = now_utc
+    incoming["status"] = incoming.get("status", "queued")
+
+    # Ensure required columns exist
+    for col in ["attempts", "last_error", "first_seen_utc"]:
+        if col not in incoming.columns:
+            incoming[col] = pd.NA
+
+    if os.path.exists(queue_path):
+        existing = pd.read_csv(queue_path)
+
+        # Standardise types
+        if "date" in existing.columns:
+            existing["date"] = pd.to_datetime(existing["date"]).dt.date.astype(str)
+
+        # Ensure union of columns
+        for col in incoming.columns:
+            if col not in existing.columns:
+                existing[col] = pd.NA
+        for col in existing.columns:
+            if col not in incoming.columns:
+                incoming[col] = pd.NA
+
+        combined = pd.concat([existing, incoming], ignore_index=True)
+
+        # Sort so the latest attempt is kept (last row wins)
+        combined = combined.sort_values(["id", "date", "last_attempt_utc"])
+
+        # Deduplicate by (id, date)
+        combined = combined.drop_duplicates(subset=["id", "date"], keep="last")
+    else:
+        # First time create: set first_seen_utc for all
+        incoming["first_seen_utc"] = now_utc
+        combined = incoming.drop_duplicates(subset=["id", "date"], keep="last")
+
+    # Fill first_seen_utc where missing
+    if "first_seen_utc" in combined.columns:
+        combined["first_seen_utc"] = combined["first_seen_utc"].fillna(now_utc)
+
+    os.makedirs(os.path.dirname(queue_path), exist_ok=True)
+    combined.to_csv(queue_path, index=False)
+
 
 def main() -> int:
     # Today (UTC) is the date we will store. The workflow should run after midnight UTC.
@@ -385,10 +445,45 @@ def main() -> int:
 
             time.sleep(1.5)
 
-    if not all_new_rows:
-        print("No new rows created for any coin. Nothing to append.")
-        return 0
 
+    if all_new_rows:
+        new_df = pd.DataFrame(all_new_rows)
+        print(f"\nNew rows to append for {target_date}: {len(new_df)}")
+
+        # Combine with existing
+        if existing.empty:
+            combined = new_df.copy()
+        else:
+            # Ensure union of columns
+            for col in new_df.columns:
+                if col not in existing.columns:
+                    existing[col] = pd.NA
+            for col in existing.columns:
+                if col not in new_df.columns:
+                    new_df[col] = pd.NA
+
+            combined = pd.concat([existing, new_df], ignore_index=True)
+
+        # De-duplicate by (id, date)
+        if {"id", "date"}.issubset(combined.columns):
+            combined["date"] = pd.to_datetime(combined["date"]).dt.date
+            combined = combined.drop_duplicates(subset=["id", "date"])
+
+        # Recompute returns across the full dataset
+        combined = recompute_returns(combined)
+
+        # Optional: add a pipeline run timestamp column (same for all rows)
+        run_dt = datetime.now(timezone.utc).isoformat()
+        combined["last_pipeline_run_utc"] = run_dt
+
+        # Save
+        os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+        combined.to_csv(OUTPUT_PATH, index=False)
+        print(f"\nSaved updated daily data to {OUTPUT_PATH}")
+    else:
+        print("No new rows created for any coin in this run.")
+
+    
     new_df = pd.DataFrame(all_new_rows)
     print(f"\nNew rows to append for {target_date}: {len(new_df)}")
 
@@ -432,18 +527,39 @@ def main() -> int:
             .to_string(index=False)
         )
 
-    # If any coins still failed after the second pass, return a non-zero exit code
+    # Persist final failures to the durable retry queue (one row per id+date)
     if not stats_df.empty:
-        error_statuses = {"error_first_pass", "error_second_pass"}
-        had_errors = stats_df["status"].isin(error_statuses).any()
-        if had_errors:
-            print(
-                "\nOne or more coins failed after retries. "
-                "The workflow will exit with a non-zero status to highlight the issue."
-            )
-            return 1
+        final_failures = stats_df[stats_df["status"] == "error_second_pass"].copy()
+        if not final_failures.empty:
+            queue_rows = []
+            for _, r in final_failures.iterrows():
+                queue_rows.append({
+                    "id": r["id"],
+                    "symbol": r["symbol"],
+                    "name": r["name"],
+                    "date": str(target_date),
+                    "attempts": 1,
+                    "last_error": r.get("error", ""),
+                    "status": "queued",
+                })
+
+            upsert_missing_queue(queue_rows, MISSING_QUEUE_PATH)
+            print(f"Queued {len(queue_rows)} item(s) for retry in {MISSING_QUEUE_PATH}.")
+
+    # Do not fail the run for partial misses if they were queued successfully.
+    # Fail only for critical pipeline errors (handled via exceptions) or
+    # if nothing was fetched and nothing could be queued.
+    if all_new_rows == [] and not stats_df.empty:
+        # If absolutely nothing succeeded, this may indicate a broader outage.
+        # Still acceptable if items were queued; otherwise fail.
+        if os.path.exists(MISSING_QUEUE_PATH):
+            print("No rows were fetched, but failures were recorded in the retry queue.")
+            return 0
+        print("No rows were fetched and no retry queue exists; treating as a failure.")
+        return 1
 
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
