@@ -1,1 +1,5 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
+zcash,zec,Zcash,2025-12-13,queued,1,"Failed to fetch https://api.coingecko.com/api/v3/coins/zcash/market_chart after 5 attempts.",2025-12-13T12:00:00Z,2025-12-13T12:00:00Z
+zcash,zec,Zcash,2025-12-12,queued,1,"Failed to fetch https://api.coingecko.com/api/v3/coins/zcash/market_chart after 5 attempts.",2025-12-12T12:00:00Z,2025-12-12T12:00:00Z
+shiba-inu,shib,Shiba Inu,2025-12-11,queued,1,"Failed to fetch https://api.coingecko.com/api/v3/coins/shiba-inu/market_chart after 5 attempts.",2025-12-11T12:00:00Z,2025-12-11T12:00:00Z
+crypto-com-chain,cro,Cronos,2025-12-10,queued,1,"Failed to fetch https://api.coingecko.com/api/v3/coins/crypto-com-chain/market_chart after 5 attempts.",2025-12-10T12:00:00Z,2025-12-10T12:00:00Z
