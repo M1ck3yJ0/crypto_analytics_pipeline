@@ -1,4 +1,1 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
-chainlink,link,Chainlink,2025-12-11,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/chainlink/market_chart after 5 attempts.,2025-12-13T21:49:13.702111+00:00,2025-12-13T21:49:13.702111+00:00
-paypal-usd,pyusd,PayPal USD,2025-12-11,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/paypal-usd/market_chart after 5 attempts.,2025-12-13T21:49:13.702111+00:00,2025-12-13T21:49:13.702111+00:00
-shiba-inu,shib,Shiba Inu,2025-12-10,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/shiba-inu/market_chart after 5 attempts.,2025-12-13T21:49:13.702111+00:00,2025-12-13T21:49:13.702111+00:00
