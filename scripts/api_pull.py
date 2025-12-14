@@ -338,9 +338,6 @@ def main() -> int:
     # First pass
     first_pass_errors = []
 
-    for target_date in TARGET_DATES:
-        print(f"\n=== Processing date {target_date} ===")
-        
     for _, row in universe.iterrows():
         coin_id = row["id"]
         symbol = row["symbol"]
@@ -488,40 +485,6 @@ def main() -> int:
         print("No new rows created for any coin in this run.")
 
     
-    new_df = pd.DataFrame(all_new_rows)
-    print(f"\nNew rows to append for {target_date}: {len(new_df)}")
-
-    # Combine with existing
-    if existing.empty:
-        combined = new_df.copy()
-    else:
-        # Ensure union of columns
-        for col in new_df.columns:
-            if col not in existing.columns:
-                existing[col] = pd.NA
-        for col in existing.columns:
-            if col not in new_df.columns:
-                new_df[col] = pd.NA
-
-        combined = pd.concat([existing, new_df], ignore_index=True)
-
-    # De-duplicate by (id, date)
-    if {"id", "date"}.issubset(combined.columns):
-        combined["date"] = pd.to_datetime(combined["date"]).dt.date
-        combined = combined.drop_duplicates(subset=["id", "date"])
-
-    # Recompute returns across the full dataset
-    combined = recompute_returns(combined)
-
-    # Optional: add a pipeline run timestamp column (same for all rows)
-    run_dt = datetime.now(timezone.utc).isoformat()
-    combined["last_pipeline_run_utc"] = run_dt
-
-    # Save
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    combined.to_csv(OUTPUT_PATH, index=False)
-    print(f"\nSaved updated daily data to {OUTPUT_PATH}")
-
     # Print summary
     stats_df = pd.DataFrame(stats)
     if not stats_df.empty:
