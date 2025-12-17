@@ -24,7 +24,7 @@ This project focuses on robust pipeline design rather than simple data extractio
 - Runs daily after UTC midnight
 - Stores one row per coin per day (date-level grain)
 - Normalises timestamps for clean analytics
-- Idempotent: safe to re-run without duplicating data
+- Safe to re-run without duplicating data
 - Automatically recomputes rolling returns (1d / 7d / 30d)
 
 ---
