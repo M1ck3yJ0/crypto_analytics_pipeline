@@ -12,7 +12,7 @@ This project focuses on robust pipeline design rather than simple data extractio
 ## Overview
 
 - **Source:** CoinGecko API
-- **Universe:** Fixed top 50 cryptocurrencies (as of 2025-12-01)
+- **Universe:** Fixed top 50 cryptocurrencies as of 2025-12-01
 - **Storage:** Version-controlled CSV dataset (GitHub)
 - **Orchestration:** GitHub Actions
 - **Analytics:** Power BI
