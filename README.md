@@ -5,7 +5,7 @@
 
 An automated, fault-tolerant cryptocurrency data pipeline that ingests daily market data from the CoinGecko API and feeds a Power BI analytics dashboard.
 
-This project focuses on **robust pipeline design** rather than simple data extraction.
+This project focuses on robust pipeline design rather than simple data extraction.
 
 ---
 
@@ -34,7 +34,7 @@ This project focuses on **robust pipeline design** rather than simple data extra
 - API failures are written to a durable retry queue
 - A separate retry workflow runs independently
 - Missing data is backfilled automatically once available
-- The pipeline favours **eventual consistency** over hard failure
+- The pipeline favours eventual consistency over hard failure
 
 ---
 
