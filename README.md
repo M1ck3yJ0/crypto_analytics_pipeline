@@ -11,22 +11,27 @@ This project focuses on robust pipeline design rather than simple data extractio
 
 ## Overview
 
-```markdown
 ## Architecture
-CoinGecko API
-      |
-      v
-[Daily Pull Action]
-      |
-      +--> coingecko_markets.csv
-      |
-      +--> missing_queue.csv (failures)
-                 |
-                 v
-        [Retry Worker Action]
-                 |
-                 +--> coingecko_markets.csv (fills gaps)
 
+```text
+
+CoinGecko API
+   |
+   v
+[Daily Pull Workflow (GitHub Actions)]
+   |--> data/coingecko_markets.csv   (append + dedupe by id+date)
+   |--> data/missing_queue.csv       (only failures)
+   |
+   v
+[Retry Worker Workflow (GitHub Actions)]
+   |--> reads: data/missing_queue.csv
+   |--> writes: data/coingecko_markets.csv (fills gaps)
+   |--> updates: data/missing_queue.csv    (removes/marks resolved)
+   |
+   v
+[Power BI Dashboard]
+
+```
 
 - **Source:** CoinGecko API
 - **Universe:** Fixed top 50 cryptocurrencies as of 2025-12-01
