@@ -1,2 +1,1 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
-zcash,zec,Zcash,2026-01-11,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/zcash/market_chart after 5 attempts.,2026-01-11T03:55:47.452830+00:00,2026-01-11T03:55:47.452830+00:00
