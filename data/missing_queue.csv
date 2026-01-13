@@ -1,2 +1,1 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
-dai,dai,Dai,2026-01-13,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/dai/market_chart after 5 attempts.,2026-01-13T03:43:34.937255+00:00,2026-01-13T03:43:34.937255+00:00
