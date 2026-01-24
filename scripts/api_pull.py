@@ -1,26 +1,24 @@
+
 #!/usr/bin/env python3
 """
 scripts/api_pull.py
 
-Daily update script for a fixed-universe crypto dataset (CoinGecko).
+This is a daily update script for the fixed-universe crypto dataset.
+A "frozen universe" of the top 50 crypto coins as of 2025-12-01 was selected
+for a Power BI crypto analytics project. 
+This script uses the CoinGecko API to read the fixed universe of coins from 
+config/universe_top50_dec01_2025.csv (id, symbol, name, rank_on_2025_12_01).
+For each coin, it fetches the recent history via /coins/{id}/market_chart.
+For today's UTC calendar date, it selects the data point closest to 00:00:00 UTC.
+It then ppends one row per coin with a pure 'date' column (YYYY-MM-DD, no time) 
+to data/coingecko_markets.csv and computes daily (1d), 7d, and 30d returns.
+If some coins fail due to rate limiting or other errors, it waits for a longer period 
+and retries those coins only. Further failure results in exit code 1 and thus an alert.
 
-- Loads a frozen universe of top 50 coins from:
-  config/universe_top50_dec01_2025.csv (id, symbol, name, rank_on_2025_12_01)
-
-- For each coin and each target UTC date:
-  fetches /coins/{id}/market_chart history and selects the datapoint closest
-  to 00:00:00 UTC for that date.
-
-- Appends one row per coin-date to:
-  data/coingecko_markets.csv
-
-- Recomputes 1d/7d/30d returns across the entire dataset.
-
-- Retries failed coins after a wait; final failures are queued to:
-  data/missing_queue.csv
 """
 
 import os
+import sys
 import time
 from datetime import datetime, timezone, date
 
@@ -35,7 +33,7 @@ UNIVERSE_PATH = os.path.join("config", "universe_top50_dec01_2025.csv")
 MISSING_QUEUE_PATH = os.path.join("data", "missing_queue.csv")
 
 # Days of history to fetch around today
-HISTORY_DAYS = 10
+HISTORY_DAYS = 5
 
 # Seconds to wait before a second attempt for failed coins
 SECOND_PASS_SLEEP_SECONDS = 1200
@@ -83,6 +81,8 @@ def load_universe(path: str = UNIVERSE_PATH) -> pd.DataFrame:
     Load fixed-universe coin list from CSV.
 
     Expected columns: id, symbol, name, rank_on_2025_12_01
+    The rank is not written into the fact table but is kept in the
+    universe file for documentation.
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Universe file not found at {path}")
@@ -103,6 +103,8 @@ def get_recent_history_for_coin(
 ) -> pd.DataFrame:
     """
     Use /coins/{id}/market_chart to fetch recent price, market cap, and volume.
+
+    For days <= 90, CoinGecko returns sub-daily intervals (for example, hourly).
     """
     url = f"{BASE_URL}/coins/{coin_id}/market_chart"
     params = {
@@ -127,6 +129,8 @@ def pick_midnight_for_date(hist_df: pd.DataFrame, target_date: date) -> pd.Serie
     """
     From a history dataframe, pick the row whose timestamp_utc is closest to
     the target date's midnight (00:00:00 UTC).
+
+    The caller uses only price, market_cap, and total_volume from the selected row.
     """
     midnight = datetime(
         target_date.year,
@@ -147,6 +151,11 @@ def recompute_returns(combined: pd.DataFrame) -> pd.DataFrame:
     """
     Recompute 1d, 7d, and 30d percentage changes per coin based on current_price
     across the entire dataset, grouped by id and ordered by date.
+
+    Overwrites/creates:
+        - price_change_percentage_24h_in_currency
+        - price_change_percentage_7d_in_currency
+        - price_change_percentage_30d_in_currency
     """
     for col in ["date", "id", "current_price"]:
         if col not in combined.columns:
@@ -189,12 +198,22 @@ def process_coin_for_date(
 ) -> dict:
     """
     Fetch recent history for a single coin and construct a row for target_date.
+
+    Returns a dictionary with:
+        {
+            "status": "ok" | "error",
+            "rows": 1 or 0,
+            "error": error_message or "",
+            "new_row": dict or None
+        }
     """
     try:
         hist_df = get_recent_history_for_coin(coin_id, VS_CURRENCY, HISTORY_DAYS)
     except Exception as e:
         msg = str(e)
-        print(f"Error fetching history for {name} ({symbol}) [{coin_id}]: {msg}")
+        print(
+            f"Error fetching history for {name} ({symbol}) [{coin_id}]: {msg}"
+        )
         return {
             "status": "error",
             "rows": 0,
@@ -224,7 +243,6 @@ def process_coin_for_date(
         "new_row": new_row,
     }
 
-
 def upsert_missing_queue(
     missing_items: list[dict],
     queue_path: str = MISSING_QUEUE_PATH,
@@ -253,7 +271,7 @@ def upsert_missing_queue(
     if os.path.exists(queue_path):
         existing = pd.read_csv(queue_path)
 
-        # Standardize types
+        # Standardise types
         if "date" in existing.columns:
             existing["date"] = pd.to_datetime(existing["date"]).dt.date.astype(str)
 
@@ -286,13 +304,9 @@ def upsert_missing_queue(
 
 
 def main() -> int:
-    # ONE-TIME BACKFILL (REMOVE AFTER RUN)
-    TARGET_DATES = [
-        date(2026, 1, 22),
-        date(2026, 1, 23),
-        date(2026, 1, 24),
-    ]
-    print(f"Target dates (UTC): {TARGET_DATES}")
+    # Today (UTC) is the date we will store. The workflow should run after midnight UTC.
+    target_date = datetime.now(timezone.utc).date()
+    print(f"Target date for daily update (midnight UTC): {target_date}")
 
     # Load universe of coins
     universe = load_universe(UNIVERSE_PATH)
@@ -306,79 +320,79 @@ def main() -> int:
         existing = pd.DataFrame()
         print("No existing data file found; a new one will be created.")
 
-    # Ensure we have a 'date' column in the existing data (do NOT reference target_date here)
+    # Ensure we have a 'date' column in the existing data
     if not existing.empty:
         if "date" not in existing.columns:
-            raise ValueError("Existing data is expected to have a 'date' column after cleaning.")
+            raise ValueError(
+                "Existing data is expected to have a 'date' column after cleaning."
+            )
         existing["date"] = pd.to_datetime(existing["date"]).dt.date
+        already_have = existing[existing["date"] == target_date]["id"].nunique()
+        print(f"Existing rows for {target_date}: {already_have} coins.")
+    else:
+        already_have = 0
 
     all_new_rows = []
     stats = []
 
-    # First pass (for each target date)
-    first_pass_errors = []  # tuples of (coin_id, symbol, name, target_date)
+    # First pass
+    first_pass_errors = []
 
-    for target_date in TARGET_DATES:
-        print(f"\n=== Processing {target_date} ===")
+    for _, row in universe.iterrows():
+        coin_id = row["id"]
+        symbol = row["symbol"]
+        name = row["name"]
 
-        # Optional: show coverage for this date
+        # If we already have a row for this coin+date, skip
         if not existing.empty:
-            already_have = existing.loc[existing["date"] == target_date, "id"].nunique()
-            print(f"Existing rows for {target_date}: {already_have} coins.")
-
-        for _, row in universe.iterrows():
-            coin_id = row["id"]
-            symbol = row["symbol"]
-            name = row["name"]
-
-            # Skip if already exists
-            if not existing.empty:
-                mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
-                if mask.any():
-                    stats.append(
-                        {
-                            "id": coin_id,
-                            "symbol": symbol,
-                            "name": name,
-                            "status": "already_have",
-                            "rows": 0,
-                            "error": "",
-                            "date": str(target_date),
-                        }
-                    )
-                    continue
-
-            print(f"[First pass] {name} ({symbol}) [{coin_id}] on {target_date}")
-            result = process_coin_for_date(coin_id, symbol, name, target_date)
-
-            if result["status"] == "ok":
-                all_new_rows.append(result["new_row"])
-                stats.append(
-                    {
-                        "id": coin_id,
-                        "symbol": symbol,
-                        "name": name,
-                        "status": "ok",
-                        "rows": result["rows"],
-                        "error": "",
-                        "date": str(target_date),
-                    }
+            mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
+            if mask.any():
+                print(
+                    f"Skipping {name} ({symbol}) [{coin_id}] - data for {target_date} already exists."
                 )
-            else:
-                first_pass_errors.append((coin_id, symbol, name, target_date))
                 stats.append(
                     {
                         "id": coin_id,
                         "symbol": symbol,
                         "name": name,
-                        "status": "error_first_pass",
+                        "status": "already_have",
                         "rows": 0,
-                        "error": result["error"],
-                        "date": str(target_date),
+                        "error": "",
                     }
                 )
+                continue
 
-            time.sleep(2.5)
+        print(
+            f"\n[First pass] Fetching data for {name} ({symbol}) [{coin_id}] on {target_date}"
+        )
+        result = process_coin_for_date(coin_id, symbol, name, target_date)
+
+        if result["status"] == "ok":
+            all_new_rows.append(result["new_row"])
+            stats.append(
+                {
+                    "id": coin_id,
+                    "symbol": symbol,
+                    "name": name,
+                    "status": "ok",
+                    "rows": result["rows"],
+                    "error": "",
+                }
+            )
+        else:
+            first_pass_errors.append((coin_id, symbol, name))
+            stats.append(
+                {
+                    "id": coin_id,
+                    "symbol": symbol,
+                    "name": name,
+                    "status": "error_first_pass",
+                    "rows": 0,
+                    "error": result["error"],
+                }
+            )
+
+        time.sleep(1.5)  # space out requests
 
     # Second pass for errors, if any
     if first_pass_errors:
@@ -388,7 +402,7 @@ def main() -> int:
         )
         time.sleep(SECOND_PASS_SLEEP_SECONDS)
 
-        for coin_id, symbol, name, target_date in first_pass_errors:
+        for coin_id, symbol, name in first_pass_errors:
             # Re-check in case the row exists (in case of manual fixes or reruns)
             if not existing.empty:
                 mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
@@ -415,10 +429,10 @@ def main() -> int:
                         "status": "ok_second_pass",
                         "rows": result["rows"],
                         "error": "",
-                        "date": str(target_date),  # FIX: keep date for queue + reporting
                     }
                 )
             else:
+                # Record final failure
                 stats.append(
                     {
                         "id": coin_id,
@@ -427,15 +441,15 @@ def main() -> int:
                         "status": "error_second_pass",
                         "rows": 0,
                         "error": result["error"],
-                        "date": str(target_date),  # FIX: keep date for queue + reporting
                     }
                 )
 
-            time.sleep(2.5)
+            time.sleep(1.5)
+
 
     if all_new_rows:
         new_df = pd.DataFrame(all_new_rows)
-        print(f"\nNew rows to append (all target dates): {len(new_df)}")
+        print(f"\nNew rows to append for {target_date}: {len(new_df)}")
 
         # Combine with existing
         if existing.empty:
@@ -470,12 +484,15 @@ def main() -> int:
     else:
         print("No new rows created for any coin in this run.")
 
+    
     # Print summary
     stats_df = pd.DataFrame(stats)
     if not stats_df.empty:
         print("\nDaily update summary:")
-        cols = [c for c in ["name", "symbol", "date", "status", "rows", "error"] if c in stats_df.columns]
-        print(stats_df[cols].to_string(index=False))
+        print(
+            stats_df[["name", "symbol", "status", "rows", "error"]]
+            .to_string(index=False)
+        )
 
     # Persist final failures to the durable retry queue (one row per id+date)
     if not stats_df.empty:
@@ -483,17 +500,15 @@ def main() -> int:
         if not final_failures.empty:
             queue_rows = []
             for _, r in final_failures.iterrows():
-                queue_rows.append(
-                    {
-                        "id": r["id"],
-                        "symbol": r["symbol"],
-                        "name": r["name"],
-                        "date": r.get("date", ""),  # should now be present
-                        "attempts": 1,
-                        "last_error": r.get("error", ""),
-                        "status": "queued",
-                    }
-                )
+                queue_rows.append({
+                    "id": r["id"],
+                    "symbol": r["symbol"],
+                    "name": r["name"],
+                    "date": str(target_date),
+                    "attempts": 1,
+                    "last_error": r.get("error", ""),
+                    "status": "queued",
+                })
 
             upsert_missing_queue(queue_rows, MISSING_QUEUE_PATH)
             print(f"Queued {len(queue_rows)} item(s) for retry in {MISSING_QUEUE_PATH}.")
@@ -502,6 +517,8 @@ def main() -> int:
     # Fail only for critical pipeline errors (handled via exceptions) or
     # if nothing was fetched and nothing could be queued.
     if all_new_rows == [] and not stats_df.empty:
+        # If absolutely nothing succeeded, this may indicate a broader outage.
+        # Still acceptable if items were queued; otherwise fail.
         if os.path.exists(MISSING_QUEUE_PATH):
             print("No rows were fetched, but failures were recorded in the retry queue.")
             return 0
