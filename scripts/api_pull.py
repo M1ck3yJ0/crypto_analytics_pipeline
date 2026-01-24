@@ -33,7 +33,7 @@ UNIVERSE_PATH = os.path.join("config", "universe_top50_dec01_2025.csv")
 MISSING_QUEUE_PATH = os.path.join("data", "missing_queue.csv")
 
 # Days of history to fetch around today
-HISTORY_DAYS = 5
+HISTORY_DAYS = 10
 
 # Seconds to wait before a second attempt for failed coins
 SECOND_PASS_SLEEP_SECONDS = 1200
@@ -302,11 +302,14 @@ def upsert_missing_queue(
     os.makedirs(os.path.dirname(queue_path), exist_ok=True)
     combined.to_csv(queue_path, index=False)
 
-
 def main() -> int:
-    # Today (UTC) is the date we will store. The workflow should run after midnight UTC.
-    target_date = datetime.now(timezone.utc).date()
-    print(f"Target date for daily update (midnight UTC): {target_date}")
+    # ONE-TIME BACKFILL (REMOVE AFTER RUN)
+    TARGET_DATES = [
+        date(2026, 1, 22),
+        date(2026, 1, 23),
+        date(2026, 1, 24),
+    ]
+    print(f"Target dates (UTC): {TARGET_DATES}")
 
     # Load universe of coins
     universe = load_universe(UNIVERSE_PATH)
@@ -335,64 +338,65 @@ def main() -> int:
     all_new_rows = []
     stats = []
 
-    # First pass
-    first_pass_errors = []
+    # First pass (for each target date)
+    first_pass_errors = []  # tuples of (coin_id, symbol, name, target_date)
 
-    for _, row in universe.iterrows():
-        coin_id = row["id"]
-        symbol = row["symbol"]
-        name = row["name"]
+    for target_date in TARGET_DATES:
+        print(f"\n=== Processing {target_date} ===")
 
-        # If we already have a row for this coin+date, skip
-        if not existing.empty:
-            mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
-            if mask.any():
-                print(
-                    f"Skipping {name} ({symbol}) [{coin_id}] - data for {target_date} already exists."
-                )
+        for _, row in universe.iterrows():
+            coin_id = row["id"]
+            symbol = row["symbol"]
+            name = row["name"]
+
+            # Skip if already exists
+            if not existing.empty:
+                mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
+                if mask.any():
+                    stats.append(
+                        {
+                            "id": coin_id,
+                            "symbol": symbol,
+                            "name": name,
+                            "status": "already_have",
+                            "rows": 0,
+                            "error": "",
+                            "date": str(target_date),
+                        }
+                    )
+                    continue
+
+            print(f"[First pass] {name} ({symbol}) [{coin_id}] on {target_date}")
+            result = process_coin_for_date(coin_id, symbol, name, target_date)
+
+            if result["status"] == "ok":
+                all_new_rows.append(result["new_row"])
                 stats.append(
                     {
                         "id": coin_id,
                         "symbol": symbol,
                         "name": name,
-                        "status": "already_have",
-                        "rows": 0,
+                        "status": "ok",
+                        "rows": result["rows"],
                         "error": "",
+                        "date": str(target_date),
                     }
                 )
-                continue
+            else:
+                first_pass_errors.append((coin_id, symbol, name, target_date))
+                stats.append(
+                    {
+                        "id": coin_id,
+                        "symbol": symbol,
+                        "name": name,
+                        "status": "error_first_pass",
+                        "rows": 0,
+                        "error": result["error"],
+                        "date": str(target_date),
+                    }
+                )
 
-        print(
-            f"\n[First pass] Fetching data for {name} ({symbol}) [{coin_id}] on {target_date}"
-        )
-        result = process_coin_for_date(coin_id, symbol, name, target_date)
-
-        if result["status"] == "ok":
-            all_new_rows.append(result["new_row"])
-            stats.append(
-                {
-                    "id": coin_id,
-                    "symbol": symbol,
-                    "name": name,
-                    "status": "ok",
-                    "rows": result["rows"],
-                    "error": "",
-                }
-            )
-        else:
-            first_pass_errors.append((coin_id, symbol, name))
-            stats.append(
-                {
-                    "id": coin_id,
-                    "symbol": symbol,
-                    "name": name,
-                    "status": "error_first_pass",
-                    "rows": 0,
-                    "error": result["error"],
-                }
-            )
-
-        time.sleep(1.5)  # space out requests
+            time.sleep(2.5)
 
     # Second pass for errors, if any
     if first_pass_errors:
@@ -402,7 +406,7 @@ def main() -> int:
         )
         time.sleep(SECOND_PASS_SLEEP_SECONDS)
 
-        for coin_id, symbol, name in first_pass_errors:
+        for coin_id, symbol, name, target_date in first_pass_errors:        
             # Re-check in case the row exists (in case of manual fixes or reruns)
             if not existing.empty:
                 mask = (existing["id"] == coin_id) & (existing["date"] == target_date)
@@ -444,7 +448,7 @@ def main() -> int:
                     }
                 )
 
-            time.sleep(1.5)
+            time.sleep(2.5)
 
 
     if all_new_rows:
@@ -504,7 +508,7 @@ def main() -> int:
                     "id": r["id"],
                     "symbol": r["symbol"],
                     "name": r["name"],
-                    "date": str(target_date),
+                    "date": r.get("date", ""),
                     "attempts": 1,
                     "last_error": r.get("error", ""),
                     "status": "queued",
