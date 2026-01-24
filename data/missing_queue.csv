@@ -1,2 +1,5 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
+figure-heloc,figr_heloc,Figure Heloc,2026-01-24,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/figure-heloc/market_chart after 5 attempts.,2026-01-24T23:44:11.633899+00:00,2026-01-24T23:44:11.633899+00:00
+litecoin,ltc,Litecoin,2026-01-23,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/litecoin/market_chart after 5 attempts.,2026-01-24T23:44:11.633899+00:00,2026-01-24T23:44:11.633899+00:00
 shiba-inu,shib,Shiba Inu,2026-01-22,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/shiba-inu/market_chart after 5 attempts.,2026-01-22T03:51:09.595021+00:00,2026-01-22T03:51:09.595021+00:00
+susds,susds,sUSDS,2026-01-22,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/susds/market_chart after 5 attempts.,2026-01-24T23:44:11.633899+00:00,2026-01-24T23:44:11.633899+00:00
