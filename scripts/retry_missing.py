@@ -13,13 +13,13 @@ Behavior:
 - On failure, updates attempts, last_error, last_attempt_utc.
 - Recomputes 1d/7d/30d returns after appending any rows.
 
-This script is intended to run on a schedule (e.g., twice daily) via GitHub Actions.
+This script is intended to run on a schedule (twice daily) via GitHub Actions.
+
 """
 
 import os
-import sys
 import time
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 
 import requests
 import pandas as pd
@@ -30,11 +30,23 @@ VS_CURRENCY = "usd"
 DATA_PATH = os.path.join("data", "coingecko_markets.csv")
 QUEUE_PATH = os.path.join("data", "missing_queue.csv")
 
-HISTORY_DAYS = 10  # <= 90 gives sub-daily points; enough coverage for most gaps
-PER_ITEM_SLEEP_SECONDS = 1.5
+# Max days to request from market_chart to avoid huge payloads.
+# 90 keeps sub-daily granularity on CoinGecko market_chart.
+MAX_HISTORY_DAYS = 90
+
+# Buffer days around oldest missing date (helps midnight selection near edges)
+BUFFER_DAYS = 2
+
+# Sleep to space out per-coin requests (not per item)
+PER_COIN_SLEEP_SECONDS = 1.5
 
 
-def _request_with_retry(url: str, params: dict, max_retries: int = 5, base_sleep: float = 5.0) -> requests.Response:
+def _request_with_retry(
+    url: str,
+    params: dict,
+    max_retries: int = 5,
+    base_sleep: float = 5.0,
+) -> requests.Response:
     for attempt in range(1, max_retries + 1):
         resp = requests.get(url, params=params, timeout=60)
         if resp.status_code == 429:
@@ -50,7 +62,7 @@ def _request_with_retry(url: str, params: dict, max_retries: int = 5, base_sleep
     raise RuntimeError(f"Failed to fetch {url} after {max_retries} attempts.")
 
 
-def get_recent_history_for_coin(coin_id: str, days: int = HISTORY_DAYS) -> pd.DataFrame:
+def get_recent_history_for_coin(coin_id: str, days: int) -> pd.DataFrame:
     url = f"{BASE_URL}/coins/{coin_id}/market_chart"
     params = {"vs_currency": VS_CURRENCY, "days": days}
     resp = _request_with_retry(url, params)
@@ -72,27 +84,105 @@ def pick_midnight_for_date(hist_df: pd.DataFrame, target_date: date) -> pd.Serie
     return tmp.loc[tmp["abs_diff"].idxmin()].drop(labels=["abs_diff"])
 
 
-def recompute_returns(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
+def _ensure_output_header(output_path: str, columns: list[str]) -> None:
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if not os.path.exists(output_path):
+        pd.DataFrame(columns=columns).to_csv(output_path, index=False)
+
+
+def _append_row_to_csv(output_path: str, row_dict: dict) -> None:
+    pd.DataFrame([row_dict]).to_csv(output_path, mode="a", header=False, index=False)
+
+
+def build_existing_keyset_and_price_lookup(data_df: pd.DataFrame) -> tuple[set[tuple[str, date]], dict[str, dict[date, float]]]:
+    """
+    Returns:
+      existing_keys: {(id, date), ...}
+      price_lookup: { id: { date: current_price } }
+    """
+    if data_df.empty:
+        return set(), {}
+
+    df = data_df.copy()
+    df["id"] = df["id"].astype(str)
     df["date"] = pd.to_datetime(df["date"]).dt.date
-    df = df.sort_values(["id", "date"], ascending=[True, True])
 
-    for col in [
-        "price_change_percentage_24h_in_currency",
-        "price_change_percentage_7d_in_currency",
-        "price_change_percentage_30d_in_currency",
-    ]:
-        if col not in df.columns:
-            df[col] = pd.NA
+    existing_keys = set(zip(df["id"], df["date"]))
 
-    def _add(group: pd.DataFrame) -> pd.DataFrame:
-        g = group.copy()
-        g["price_change_percentage_24h_in_currency"] = g["current_price"].pct_change(1) * 100
-        g["price_change_percentage_7d_in_currency"] = g["current_price"].pct_change(7) * 100
-        g["price_change_percentage_30d_in_currency"] = g["current_price"].pct_change(30) * 100
-        return g
+    lookup: dict[str, dict[date, float]] = {}
+    if "current_price" in df.columns:
+        for cid, g in df.groupby("id"):
+            gg = g.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+            lookup[cid] = dict(zip(gg["date"], gg["current_price"]))
+    return existing_keys, lookup
 
-    return df.groupby("id", group_keys=False).apply(_add)
+
+def compute_returns_for_new_row(
+    coin_id: str,
+    target_date: date,
+    current_price: float,
+    price_lookup: dict[str, dict[date, float]],
+) -> tuple[float | None, float | None, float | None]:
+    """
+    Exact-date returns:
+      1d uses D-1
+      7d uses D-7
+      30d uses D-30
+    Returns None if the required historical date is missing.
+    """
+    by_date = price_lookup.get(str(coin_id), {})
+
+    def pct(now: float, past: float | None) -> float | None:
+        if past is None or past == 0:
+            return None
+        return (now / past - 1.0) * 100.0
+
+    r1 = pct(current_price, by_date.get(target_date - timedelta(days=1)))
+    r7 = pct(current_price, by_date.get(target_date - timedelta(days=7)))
+    r30 = pct(current_price, by_date.get(target_date - timedelta(days=30)))
+    return r1, r7, r30
+
+
+def upsert_missing_queue(missing_items: list[dict], queue_path: str = QUEUE_PATH) -> None:
+    """
+    Same behavior as your original: unique by (id, date), last row wins.
+    """
+    if not missing_items:
+        return
+
+    now_utc = datetime.now(timezone.utc).isoformat()
+
+    incoming = pd.DataFrame(missing_items)
+    incoming["date"] = pd.to_datetime(incoming["date"]).dt.date.astype(str)
+    incoming["last_attempt_utc"] = now_utc
+    incoming["status"] = incoming.get("status", "queued")
+
+    for col in ["attempts", "last_error", "first_seen_utc"]:
+        if col not in incoming.columns:
+            incoming[col] = pd.NA
+
+    if os.path.exists(queue_path):
+        existing = pd.read_csv(queue_path)
+        if "date" in existing.columns:
+            existing["date"] = pd.to_datetime(existing["date"]).dt.date.astype(str)
+
+        for col in incoming.columns:
+            if col not in existing.columns:
+                existing[col] = pd.NA
+        for col in existing.columns:
+            if col not in incoming.columns:
+                incoming[col] = pd.NA
+
+        combined = pd.concat([existing, incoming], ignore_index=True)
+        combined = combined.sort_values(["id", "date", "last_attempt_utc"])
+        combined = combined.drop_duplicates(subset=["id", "date"], keep="last")
+    else:
+        incoming["first_seen_utc"] = now_utc
+        combined = incoming.drop_duplicates(subset=["id", "date"], keep="last")
+
+    combined["first_seen_utc"] = combined["first_seen_utc"].fillna(now_utc)
+    os.makedirs(os.path.dirname(queue_path), exist_ok=True)
+    combined.to_csv(queue_path, index=False)
 
 
 def main() -> int:
@@ -108,13 +198,30 @@ def main() -> int:
     if not os.path.exists(DATA_PATH):
         raise FileNotFoundError(f"Main data file not found at {DATA_PATH}")
 
+    # Ensure the output has a header that supports append-only filled rows
+    out_cols = [
+        "id", "symbol", "name", "date",
+        "current_price", "market_cap", "total_volume",
+        "price_change_percentage_24h_in_currency",
+        "price_change_percentage_7d_in_currency",
+        "price_change_percentage_30d_in_currency",
+        "last_pipeline_run_utc",
+    ]
+    _ensure_output_header(DATA_PATH, out_cols)
+
     data = pd.read_csv(DATA_PATH)
-    if "date" not in data.columns:
+    if not data.empty and "date" not in data.columns:
         raise ValueError("Main data file must have a 'date' column (date-only format).")
 
-    data["date"] = pd.to_datetime(data["date"]).dt.date
+    # Standardize data types
+    if not data.empty:
+        data["id"] = data["id"].astype(str)
+        data["date"] = pd.to_datetime(data["date"]).dt.date
 
-    # Standardise queue types
+    existing_keys, price_lookup = build_existing_keyset_and_price_lookup(data)
+
+    # Standardize queue types + ensure cols
+    queue["id"] = queue["id"].astype(str)
     queue["date"] = pd.to_datetime(queue["date"]).dt.date
     if "attempts" not in queue.columns:
         queue["attempts"] = 0
@@ -125,85 +232,109 @@ def main() -> int:
 
     now_utc = datetime.now(timezone.utc).isoformat()
 
-    successes = []
-    failures = 0
-    new_rows = []
-
-    # Process oldest first (optional)
+    # Process oldest first
     if "first_seen_utc" in queue.columns:
         queue = queue.sort_values(["first_seen_utc"])
     else:
         queue = queue.sort_values(["date", "id"])
 
-    for idx, r in queue.iterrows():
-        coin_id = r["id"]
-        symbol = r.get("symbol", "")
-        name = r.get("name", "")
-        d = r["date"]
+    # We'll drop successful queue entries by index at the end
+    success_indices: list[int] = []
+    failures = 0
 
-        # If already filled, remove from queue
-        if ((data["id"] == coin_id) & (data["date"] == d)).any():
-            successes.append(idx)
+    # Group queue by coin to reduce API calls
+    for coin_id, g in queue.groupby("id", sort=False):
+        # Filter out items already present
+        pending_rows = []
+        for idx, r in g.iterrows():
+            d = r["date"]
+            if (coin_id, d) in existing_keys:
+                success_indices.append(idx)
+            else:
+                pending_rows.append((idx, r))
+
+        if not pending_rows:
             continue
 
-        print(f"Retrying {name} ({symbol}) [{coin_id}] for date {d} ...")
+        # Determine history window needed for this coin
+        oldest_date = min(r["date"] for _, r in pending_rows)
+        today_utc = datetime.now(timezone.utc).date()
+        days_needed = (today_utc - oldest_date).days + BUFFER_DAYS
+        days_needed = max(2, min(MAX_HISTORY_DAYS, days_needed))
+
+        symbol_any = str(pending_rows[0][1].get("symbol", ""))
+        name_any = str(pending_rows[0][1].get("name", ""))
+
+        print(f"\nCoin {name_any} ({symbol_any}) [{coin_id}] - {len(pending_rows)} item(s), requesting {days_needed} day(s) history...")
 
         try:
-            hist = get_recent_history_for_coin(coin_id, days=HISTORY_DAYS)
-            picked = pick_midnight_for_date(hist, d)
-
-            new_rows.append({
-                "id": coin_id,
-                "symbol": symbol,
-                "name": name,
-                "date": d,
-                "current_price": picked["price"],
-                "market_cap": picked["market_cap"],
-                "total_volume": picked["total_volume"],
-            })
-
-            successes.append(idx)
-            print(f"Filled {coin_id} on {d}.")
+            hist = get_recent_history_for_coin(coin_id, days=days_needed)
         except Exception as e:
-            failures += 1
-            queue.at[idx, "attempts"] = int(queue.at[idx, "attempts"]) + 1
-            queue.at[idx, "last_error"] = str(e)
-            queue.at[idx, "last_attempt_utc"] = now_utc
-            queue.at[idx, "status"] = "error"
-            print(f"Failed {coin_id} on {d}: {e}")
+            # If we cannot fetch history, mark all pending as failed once
+            msg = str(e)
+            print(f"Failed fetching history for {coin_id}: {msg}")
+            failures += len(pending_rows)
+            for idx, r in pending_rows:
+                queue.at[idx, "attempts"] = int(queue.at[idx, "attempts"]) + 1
+                queue.at[idx, "last_error"] = msg
+                queue.at[idx, "last_attempt_utc"] = now_utc
+                queue.at[idx, "status"] = "error"
+            time.sleep(PER_COIN_SLEEP_SECONDS)
+            continue
 
-        time.sleep(PER_ITEM_SLEEP_SECONDS)
+        # Fill each missing date for this coin from the one history response
+        for idx, r in pending_rows:
+            d = r["date"]
+            symbol = r.get("symbol", "")
+            name = r.get("name", "")
 
-    if new_rows:
-        new_df = pd.DataFrame(new_rows)
+            try:
+                picked = pick_midnight_for_date(hist, d)
 
-        # Union columns
-        for col in new_df.columns:
-            if col not in data.columns:
-                data[col] = pd.NA
-        for col in data.columns:
-            if col not in new_df.columns:
-                new_df[col] = pd.NA
+                current_price = float(picked["price"])
+                r1, r7, r30 = compute_returns_for_new_row(coin_id, d, current_price, price_lookup)
 
-        combined = pd.concat([data, new_df], ignore_index=True)
-        combined["date"] = pd.to_datetime(combined["date"]).dt.date
-        combined = combined.drop_duplicates(subset=["id", "date"])
-        combined = recompute_returns(combined)
+                new_row = {
+                    "id": coin_id,
+                    "symbol": symbol,
+                    "name": name,
+                    "date": d,
+                    "current_price": current_price,
+                    "market_cap": float(picked["market_cap"]),
+                    "total_volume": float(picked["total_volume"]),
+                    "price_change_percentage_24h_in_currency": r1,
+                    "price_change_percentage_7d_in_currency": r7,
+                    "price_change_percentage_30d_in_currency": r30,
+                    "last_pipeline_run_utc": now_utc,
+                }
 
-        combined["last_pipeline_run_utc"] = now_utc
-        combined.to_csv(DATA_PATH, index=False)
-        print(f"Appended {len(new_df)} row(s) to {DATA_PATH}.")
-    else:
-        print("No missing rows were filled in this run.")
+                _append_row_to_csv(DATA_PATH, new_row)
 
-    # Remove successful queue entries
-    queue_remaining = queue.drop(index=successes).reset_index(drop=True)
+                # Update in-memory structures to prevent duplicates and allow subsequent return calcs
+                existing_keys.add((coin_id, d))
+                price_lookup.setdefault(coin_id, {})[d] = current_price
+
+                success_indices.append(idx)
+                print(f"Filled {coin_id} on {d}.")
+
+            except Exception as e:
+                failures += 1
+                msg = str(e)
+                queue.at[idx, "attempts"] = int(queue.at[idx, "attempts"]) + 1
+                queue.at[idx, "last_error"] = msg
+                queue.at[idx, "last_attempt_utc"] = now_utc
+                queue.at[idx, "status"] = "error"
+                print(f"Failed {coin_id} on {d}: {msg}")
+
+        time.sleep(PER_COIN_SLEEP_SECONDS)
+
+    # Remove successful queue entries and persist queue
+    queue_remaining = queue.drop(index=success_indices).reset_index(drop=True)
     queue_remaining.to_csv(QUEUE_PATH, index=False)
 
-    print(f"Queue updated. Removed {len(successes)} item(s). Remaining: {len(queue_remaining)}.")
+    print(f"\nQueue updated. Removed {len(success_indices)} item(s). Remaining: {len(queue_remaining)}.")
     if failures:
-        print(f"Retry run completed with {failures} failure(s).")
-        # Do not fail the workflow by default; the queue preserves state for next run.
+        print(f"Retry run completed with {failures} failure(s). Queue preserves state for next run.")
 
     return 0
 
