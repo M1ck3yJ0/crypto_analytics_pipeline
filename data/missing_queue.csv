@@ -3,3 +3,4 @@ figure-heloc,figr_heloc,Figure Heloc,2026-01-24,queued,1,Failed to fetch https:/
 litecoin,ltc,Litecoin,2026-01-23,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/litecoin/market_chart after 5 attempts.,2026-01-24T23:44:11.633899+00:00,2026-01-24T23:44:11.633899+00:00
 shiba-inu,shib,Shiba Inu,2026-01-22,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/shiba-inu/market_chart after 5 attempts.,2026-01-22T03:51:09.595021+00:00,2026-01-22T03:51:09.595021+00:00
 susds,susds,sUSDS,2026-01-22,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/susds/market_chart after 5 attempts.,2026-01-24T23:44:11.633899+00:00,2026-01-24T23:44:11.633899+00:00
+zcash,zec,Zcash,2026-01-25,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/zcash/market_chart after 5 attempts.,2026-01-25T14:02:31.351478+00:00,2026-01-25T14:02:31.351478+00:00
