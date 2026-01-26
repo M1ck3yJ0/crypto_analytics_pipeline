@@ -11,7 +11,7 @@ Behavior:
 - Appends a date-only row to data/coingecko_markets.csv if missing.
 - On success, removes that (id, date) row from the queue.
 - On failure, updates attempts, last_error, last_attempt_utc.
-- Recomputes 1d/7d/30d returns after appending any rows.
+- Computes 1d/7d/30d returns for each newly appended row.
 
 This script is intended to run on a schedule (twice daily) via GitHub Actions.
 
@@ -84,15 +84,23 @@ def pick_midnight_for_date(hist_df: pd.DataFrame, target_date: date) -> pd.Serie
     return tmp.loc[tmp["abs_diff"].idxmin()].drop(labels=["abs_diff"])
 
 
-def _ensure_output_header(output_path: str, columns: list[str]) -> None:
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    if not os.path.exists(output_path):
-        pd.DataFrame(columns=columns).to_csv(output_path, index=False)
+def _ensure_file_endswith_newline(path: str) -> None:
+    if not os.path.exists(path):
+        return
+    if os.path.getsize(path) == 0:
+        return
 
+    with open(path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        last = f.read(1)
+
+    if last != b"\n":
+        with open(path, "ab") as f:
+            f.write(b"\n")
 
 def _append_row_to_csv(output_path: str, row_dict: dict) -> None:
+    _ensure_file_endswith_newline(output_path)
     pd.DataFrame([row_dict]).to_csv(output_path, mode="a", header=False, index=False)
-
 
 def build_existing_keyset_and_price_lookup(data_df: pd.DataFrame) -> tuple[set[tuple[str, date]], dict[str, dict[date, float]]]:
     """
@@ -207,7 +215,6 @@ def main() -> int:
         "price_change_percentage_30d_in_currency",
         "last_pipeline_run_utc",
     ]
-    _ensure_output_header(DATA_PATH, out_cols)
 
     data = pd.read_csv(DATA_PATH)
     if not data.empty and "date" not in data.columns:
