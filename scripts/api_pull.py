@@ -103,13 +103,22 @@ def pick_midnight_for_date(hist_df: pd.DataFrame, target_date: date) -> pd.Serie
     return best.drop(labels=["abs_diff"])
 
 
-def _ensure_output_header(output_path: str, columns: list[str]) -> None:
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    if not os.path.exists(output_path):
-        pd.DataFrame(columns=columns).to_csv(output_path, index=False)
+def _ensure_file_endswith_newline(path: str) -> None:
+    if not os.path.exists(path):
+        return
+    if os.path.getsize(path) == 0:
+        return
 
+    with open(path, "rb") as f:
+        f.seek(-1, os.SEEK_END)
+        last = f.read(1)
+
+    if last != b"\n":
+        with open(path, "ab") as f:
+            f.write(b"\n")
 
 def _append_row_to_csv(output_path: str, row_dict: dict) -> None:
+    _ensure_file_endswith_newline(output_path)
     pd.DataFrame([row_dict]).to_csv(output_path, mode="a", header=False, index=False)
 
 
@@ -186,7 +195,7 @@ def compute_returns_for_new_row(
     """
     by_date = price_lookup.get(str(coin_id), {})
 
-    def pct(now: float, past: float) -> float | None:
+    def pct(now: float, past: float | None) -> float | None:
         if past is None or past == 0:
             return None
         return (now / past - 1.0) * 100.0
@@ -217,7 +226,6 @@ def main() -> int:
         "price_change_percentage_30d_in_currency",
         "last_pipeline_run_utc",
     ]
-    _ensure_output_header(OUTPUT_PATH, columns)
 
     # Load existing once for: skip set + price lookup
     existing = pd.read_csv(OUTPUT_PATH) if os.path.exists(OUTPUT_PATH) else pd.DataFrame()
