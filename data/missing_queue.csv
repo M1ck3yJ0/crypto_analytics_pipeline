@@ -1,2 +1,1 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
-shiba-inu,shib,Shiba Inu,2026-02-07,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/shiba-inu/market_chart after 5 attempts.,2026-02-07T04:11:18.008902+00:00,2026-02-07T04:11:18.008902+00:00
