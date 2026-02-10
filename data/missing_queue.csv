@@ -1,2 +1,1 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
-susds,susds,sUSDS,2026-02-10,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/susds/market_chart after 5 attempts.,2026-02-10T04:43:36.600941+00:00,2026-02-10T04:43:36.600941+00:00
