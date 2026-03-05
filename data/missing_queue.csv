@@ -1,1 +1,2 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
+paypal-usd,pyusd,PayPal USD,2026-03-05,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/paypal-usd/market_chart after 5 attempts.,2026-03-05T04:13:24.674775+00:00,2026-03-05T04:13:24.674775+00:00
