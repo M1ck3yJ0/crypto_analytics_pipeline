@@ -1,2 +1,1 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
-usdt0,usdt0,USDT0,2026-04-05,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/usdt0/market_chart after 5 attempts.,2026-04-05T04:48:18.936078+00:00,2026-04-05T04:48:18.936078+00:00
