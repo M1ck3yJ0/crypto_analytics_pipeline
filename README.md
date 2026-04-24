@@ -68,8 +68,9 @@ config/   # Fixed universe definition
 data/     # Fact table and retry queue
 scripts/  # Ingestion and retry logic
 .github/  # GitHub Actions workflows
+```
 
-
+---
 
 ## Acknowledgements
 
