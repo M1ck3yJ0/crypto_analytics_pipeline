@@ -68,3 +68,11 @@ config/   # Fixed universe definition
 data/     # Fact table and retry queue
 scripts/  # Ingestion and retry logic
 .github/  # GitHub Actions workflows
+
+
+
+## Acknowledgements
+
+This project was developed with assistance from ChatGPT, 
+which supported rapid code development/debugging and README drafting.
+All analytical decisions, pipeline choices, and results interpretation are the author's own.
