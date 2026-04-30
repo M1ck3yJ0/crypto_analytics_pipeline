@@ -1,1 +1,2 @@
 id,symbol,name,date,status,attempts,last_error,first_seen_utc,last_attempt_utc
+world-liberty-financial,wlfi,World Liberty Financial,2026-04-30,queued,1,Failed to fetch https://api.coingecko.com/api/v3/coins/world-liberty-financial/market_chart after 5 attempts.,2026-04-30T05:22:43.362054+00:00,2026-04-30T05:22:43.362054+00:00
