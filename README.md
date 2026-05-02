@@ -27,27 +27,26 @@ flowchart TD
     classDef action fill:#fff8e1,stroke:#f9a825,stroke-width:2px,color:#212529
     classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#212529
     classDef output fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#212529
-    classDef badge fill:#2ea44f,stroke:#2ea44f,color:#ffffff,font-size:12px
 
-    A([🌐 CoinGecko API]):::api
+    A([CoinGecko API]):::api
 
-    subgraph GHA1 ["⚙️ GitHub Actions — Daily Workflow ✅ passing"]
-        B["📥 Fetch market data\nfor top 50 coins"]:::action
+    subgraph GHA1 ["GitHub Actions: Daily Workflow -- passing"]
+        B["Fetch market data for top 50 coins"]:::action
     end
 
-    subgraph GHA2 ["⚙️ GitHub Actions — Retry Workflow ✅ passing"]
-        E["🔁 Read missing queue\nAttempt backfill"]:::action
+    subgraph GHA2 ["GitHub Actions: Retry Workflow -- passing"]
+        E["Read missing queue, attempt backfill"]:::action
     end
 
-    A -->|"runs daily after UTC midnight"| B
-    B -->|"✅ success"| C[("💾 coingecko_markets.csv")]:::storage
-    B -->|"❌ failure"| D[("⚠️ missing_queue.csv")]:::storage
-    D -->|"triggers retry"| E
-    E -->|"✅ resolved"| C
-    E -->|"❌ still failing"| D
-    C -->|"feeds"| F([("📊 Power BI Dashboard")]):::output
-
+    A -->|runs daily after UTC midnight| B
+    B -->|success| C[(coingecko_markets.csv)]:::storage
+    B -->|failure| D[(missing_queue.csv)]:::storage
+    D -->|triggers retry| E
+    E -->|resolved| C
+    E -->|still failing| D
+    C -->|feeds| F([Power BI Dashboard]):::output
 ```
+
 
 ```text
 
