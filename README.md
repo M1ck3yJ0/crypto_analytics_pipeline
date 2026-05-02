@@ -7,6 +7,8 @@
 cycles in the top 50 cryptocurrencies, and which coins exhibit the most 
 consistent volatility patterns?
 
+---
+
 An automated, fault-tolerant cryptocurrency data pipeline that ingests daily market data from the CoinGecko API and feeds a Power BI analytics dashboard.
 
 This project focuses on robust pipeline design rather than simple data extraction.
