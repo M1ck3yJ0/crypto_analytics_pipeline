@@ -7,7 +7,6 @@ An automated, fault-tolerant cryptocurrency data pipeline that ingests daily mar
 
 This project focuses on robust pipeline design rather than simple data extraction.
 
----
 
 **Research question:** Does short-term price momentum persist across market 
 cycles in the top 50 cryptocurrencies, and which coins exhibit the most 
