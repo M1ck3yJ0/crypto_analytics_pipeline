@@ -31,21 +31,21 @@ flowchart TD
 
     A([CoinGecko API]):::api
 
-    subgraph GHA1 ["GitHub Actions:    Daily Workflow"]
-        B["Fetch market data\nfor top 50 coins"]:::action
+    subgraph GHA1 [" "]
+        B["GitHub Actions: Daily Workflow\nFetch market data\nfor top 50 coins"]:::action
     end
 
-    subgraph GHA2 ["GitHub Actions: Retry Workflow"]
-        E["Read missing queue\nAttempt backfill"]:::action
+    subgraph GHA2 [" "]
+        E["GitHub Actions: Retry Workflow\nRead missing queue\nAttempt backfill"]:::action
     end
 
-    A -->|runs daily after UTC midnight| B
-    B -->|  success  | C[(coingecko_markets.csv)]:::storage
-    B -->|  failure  | D[(missing_queue.csv)]:::storage
-    D -->|  triggers retry  | E
-    E -->|  resolved  | C
-    E -->|  still failing  | D
-    C -->|  feeds  | F([Power BI Dashboard]):::output
+    A -->|\nruns daily after UTC midnight\n| B
+    B -->|\nsuccess\n| C[(coingecko_markets.csv)]:::storage
+    B -->|\nfailure\n| D[(missing_queue.csv)]:::storage
+    D -->|\ntriggers retry\n| E
+    E -->|\nresolved\n| C
+    E -->|\nstill failing\n| D
+    C -->|\nfeeds\n| F([Power BI Dashboard]):::output
 ```
 
 ---
