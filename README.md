@@ -24,43 +24,32 @@ This project focuses on robust pipeline design rather than simple data extractio
 ```mermaid
 flowchart TD
     classDef api fill:#ffffff,stroke:#444444,stroke-width:2px,color:#212529
-    classDef action fill:#f0f0f0,stroke:#666666,stroke-width:1.5px,color:#212529
+    classDef action fill:#f0f0f0,stroke:#666666,stroke-width:1.5px,color:#212529,rx:12,ry:12
     classDef storage fill:#d9d9d9,stroke:#444444,stroke-width:2px,color:#212529
     classDef output fill:#ffffff,stroke:#444444,stroke-width:2px,color:#212529
+    classDef label fill:#e8e8e8,stroke:#e8e8e8,color:#555555,font-size:12px
 
     A([CoinGecko API]):::api
-    B["Daily Workflow\nFetch market data for top 50 coins"]:::action
-    E["Retry Workflow\nRead missing queue, attempt backfill"]:::action
+
+    subgraph GHA1 ["GitHub Actions:  Daily Workflow"]
+        B["Fetch market data\nfor top 50 coins"]:::action
+    end
+
+    subgraph GHA2 ["
+                    GitHub Actions: Retry Workflow
+                      "]
+        E["Read missing queue\nAttempt backfill"]:::action
+    end
 
     A -->|runs daily after UTC midnight| B
-    B -->|success| C[(coingecko_markets.csv)]:::storage
-    B -->|failure| D[(missing_queue.csv)]:::storage
-    D -->|triggers retry| E
-    E -->|resolved| C
-    E -->|still failing| D
-    C -->|feeds| F([Power BI Dashboard]):::output
+    B -->| success | C[(coingecko_markets.csv)]:::storage
+    B -->| failure | D[(missing_queue.csv)]:::storage
+    D -->| triggers retry | E
+    E -->| resolved | C
+    E -->| still failing | D
+    C -->| feeds | F([Power BI Dashboard]):::output
 ```
 
-
-```text
-
-CoinGecko API
-   |
-   v
-[Daily Pull Workflow (GitHub Actions)]
-   |--> data/coingecko_markets.csv   (append + dedupe by id+date)
-   |--> data/missing_queue.csv       (only failures)
-   |
-   v
-[Retry Worker Workflow (GitHub Actions)]
-   |--> reads: data/missing_queue.csv
-   |--> writes: data/coingecko_markets.csv (fills gaps)
-   |--> updates: data/missing_queue.csv    (removes/marks resolved)
-   |
-   v
-[Power BI Dashboard]
-
-```
 ---
 
 ## Pipeline Design
