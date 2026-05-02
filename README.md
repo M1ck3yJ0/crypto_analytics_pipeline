@@ -3,15 +3,15 @@
 [![Update CoinGecko Data](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/update_coingecko.yml/badge.svg)]
 [![Retry Missing Rows](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/retry_missing.yml/badge.svg)]
 
-**Research question:** Does short-term price momentum persist across market 
-cycles in the top 50 cryptocurrencies, and which coins exhibit the most 
-consistent volatility patterns?
-
----
-
 An automated, fault-tolerant cryptocurrency data pipeline that ingests daily market data from the CoinGecko API and feeds a Power BI analytics dashboard.
 
 This project focuses on robust pipeline design rather than simple data extraction.
+
+---
+
+**Research question:** Does short-term price momentum persist across market 
+cycles in the top 50 cryptocurrencies, and which coins exhibit the most 
+consistent volatility patterns?
 
 *Analysis and visualisation layer in progress.*
 
