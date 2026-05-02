@@ -21,32 +21,32 @@ This project focuses on robust pipeline design rather than simple data extractio
 
 ## Architecture
 
-![Update CoinGecko Data](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/update_coingecko.yml/badge.svg)
-![Retry Missing Rows](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/retry_missing.yml/badge.svg)
-
 ```mermaid
 flowchart TD
-    A([CoinGecko API]) -->|daily after UTC midnight| B
+    classDef api fill:#f8f9fa,stroke:#6c757d,stroke-width:2px,color:#212529
+    classDef action fill:#fff8e1,stroke:#f9a825,stroke-width:2px,color:#212529
+    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#212529
+    classDef output fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#212529
+    classDef badge fill:#2ea44f,stroke:#2ea44f,color:#ffffff,font-size:12px
 
-    subgraph GHA1 [GitHub Actions: Daily Workflow]
-        B[Fetch market data\nfor 50 coins]
+    A([🌐 CoinGecko API]):::api
+
+    subgraph GHA1 ["⚙️ GitHub Actions — Daily Workflow ✅ passing"]
+        B["📥 Fetch market data\nfor top 50 coins"]:::action
     end
 
-    B -->|success| C[(data/coingecko_markets.csv)]
-    B -->|failure| D[(data/missing_queue.csv)]
-
-    subgraph GHA2 [GitHub Actions: Retry Workflow]
-        E[Read missing_queue\nAttempt backfill]
+    subgraph GHA2 ["⚙️ GitHub Actions — Retry Workflow ✅ passing"]
+        E["🔁 Read missing queue\nAttempt backfill"]:::action
     end
 
-    D -->|triggers retry worker| E
-    E -->|resolved| C
-    E -->|still failing| D
-
-    C -->|feeds| F([Power BI Dashboard])
+    A -->|"runs daily after UTC midnight"| B
+    B -->|"✅ success"| C[("💾 coingecko_markets.csv")]:::storage
+    B -->|"❌ failure"| D[("⚠️ missing_queue.csv")]:::storage
+    D -->|"triggers retry"| E
+    E -->|"✅ resolved"| C
+    E -->|"❌ still failing"| D
+    C -->|"feeds"| F([("📊 Power BI Dashboard")]):::output
 ```
-
-## Architecture
 
 ```text
 
