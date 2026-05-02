@@ -22,7 +22,7 @@ This project focuses on robust pipeline design rather than simple data extractio
 ## Architecture
 
 <p align="center">
-  <img src="architecture.png" width="550"/>
+  <img src="architecture.png" width="600"/>
 </p>
 
 ---
