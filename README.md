@@ -21,7 +21,7 @@ This project focuses on robust pipeline design rather than simple data extractio
 
 ## Architecture
 
-![Pipeline architecture](architecture.png)
+<img src="architecture.png" width="600"/>
 
 ---
 
