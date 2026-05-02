@@ -23,19 +23,20 @@ This project focuses on robust pipeline design rather than simple data extractio
 
 ```mermaid
 flowchart TD
-    classDef api fill:#f8f9fa,stroke:#6c757d,stroke-width:2px,color:#212529
-    classDef action fill:#fff8e1,stroke:#f9a825,stroke-width:2px,color:#212529
-    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#212529
-    classDef output fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#212529
+    classDef api fill:#ffffff,stroke:#444444,stroke-width:2px,color:#212529
+    classDef action fill:#f0f0f0,stroke:#666666,stroke-width:1.5px,color:#212529,rx:12,ry:12
+    classDef storage fill:#d9d9d9,stroke:#444444,stroke-width:2px,color:#212529
+    classDef output fill:#ffffff,stroke:#444444,stroke-width:2px,color:#212529
+    classDef label fill:#e8e8e8,stroke:#e8e8e8,color:#555555,font-size:12px
 
     A([CoinGecko API]):::api
 
-    subgraph GHA1 ["GitHub Actions: Daily Workflow -- passing"]
-        B["Fetch market data for top 50 coins"]:::action
+    subgraph GHA1 ["GitHub Actions: Daily Workflow"]
+        B["Fetch market data\nfor top 50 coins"]:::action
     end
 
-    subgraph GHA2 ["GitHub Actions: Retry Workflow -- passing"]
-        E["Read missing queue, attempt backfill"]:::action
+    subgraph GHA2 ["GitHub Actions: Retry Workflow"]
+        E["Read missing queue\nAttempt backfill"]:::action
     end
 
     A -->|runs daily after UTC midnight| B
@@ -46,7 +47,6 @@ flowchart TD
     E -->|still failing| D
     C -->|feeds| F([Power BI Dashboard]):::output
 ```
-
 
 ```text
 
