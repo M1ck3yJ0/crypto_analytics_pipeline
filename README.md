@@ -39,13 +39,13 @@ flowchart TD
         E["GitHub Actions: Retry Workflow\nRead missing queue\nAttempt backfill"]:::action
     end
 
-    A -->|\nruns daily after UTC midnight\n| B
-    B -->|\nsuccess\n| C[(coingecko_markets.csv)]:::storage
-    B -->|\nfailure\n| D[(missing_queue.csv)]:::storage
-    D -->|\ntriggers retry\n| E
-    E -->|\nresolved\n| C
-    E -->|\nstill failing\n| D
-    C -->|\nfeeds\n| F([Power BI Dashboard]):::output
+    A -->|\nruns daily after UTC midnight\n | B
+    B -->|\nsuccess\n | C[(coingecko_markets.csv)]:::storage
+    B -->|\nfailure\n | D[(missing_queue.csv)]:::storage
+    D -->|\ntriggers retry\n | E
+    E -->|\nresolved\n | C
+    E -->|\nstill failing\n | D
+    C -->|\nfeeds\n | F([Power BI Dashboard]):::output
 ```
 
 ---
