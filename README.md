@@ -31,7 +31,7 @@ flowchart TD
 
     A([CoinGecko API]):::api
 
-    subgraph GHA1 ["GitHub Actions: Daily Workflow"]
+    subgraph GHA1 ["GitHub Actions:    Daily Workflow"]
         B["Fetch market data\nfor top 50 coins"]:::action
     end
 
