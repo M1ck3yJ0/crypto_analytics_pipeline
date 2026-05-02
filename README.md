@@ -1,7 +1,7 @@
 # Crypto Analytics Data Pipeline
 
-[![Update CoinGecko Data](https://github.com/M1ck3yJ0/crypto_analytics_pipeline/actions/workflows/update_coingecko.yml/badge.svg)]
-[![Retry Missing Rows](https://github.com/M1ck3yJ0/crypto_analytics_pipeline/actions/workflows/retry_missing.yml/badge.svg)]
+[![Update CoinGecko Data](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/update_coingecko.yml/badge.svg)]
+[![Retry Missing Rows](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/retry_missing.yml/badge.svg)]
 
 An automated, fault-tolerant cryptocurrency data pipeline that ingests daily market data from the CoinGecko API and feeds a Power BI analytics dashboard.
 
@@ -18,6 +18,33 @@ This project focuses on robust pipeline design rather than simple data extractio
 - **Analytics:** Power BI
 
 ---
+
+## Architecture
+
+![Update CoinGecko Data](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/update_coingecko.yml/badge.svg)
+![Retry Missing Rows](https://github.com/M1ck3yJ0/crypto-data-pipeline/actions/workflows/retry_missing.yml/badge.svg)
+
+```mermaid
+flowchart TD
+    A([CoinGecko API]) -->|daily after UTC midnight| B
+
+    subgraph GHA1 [GitHub Actions: Daily Workflow]
+        B[Fetch market data\nfor 50 coins]
+    end
+
+    B -->|success| C[(data/coingecko_markets.csv)]
+    B -->|failure| D[(data/missing_queue.csv)]
+
+    subgraph GHA2 [GitHub Actions: Retry Workflow]
+        E[Read missing_queue\nAttempt backfill]
+    end
+
+    D -->|triggers retry worker| E
+    E -->|resolved| C
+    E -->|still failing| D
+
+    C -->|feeds| F([Power BI Dashboard])
+```
 
 ## Architecture
 
